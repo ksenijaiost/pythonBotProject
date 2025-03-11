@@ -46,3 +46,17 @@ class Menu:
         adm_button1 = types.KeyboardButton(ButtonText.ADM_CONTEST)
         adm_menu.add(adm_button1)
         return adm_menu
+
+    @staticmethod
+    def guide_link_keyboard():
+        keyboard = types.InlineKeyboardMarkup()
+        button1 = types.InlineKeyboardButton(
+            text="Открыть сайт с гайдами",
+            url="https://acnh.tilda.ws"
+        )
+        button2 = types.InlineKeyboardButton(
+            text="В главное меню",
+            callback_data="back_to_user_menu"
+        )
+        keyboard.add(button1, button2)
+        return keyboard
