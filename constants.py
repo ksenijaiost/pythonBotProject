@@ -24,3 +24,24 @@ class ButtonText:
     # Администраторские
     # Главное меню
     ADM_CONTEST = "Конкурс"
+
+
+class ButtonCallback:
+    # В главное меню (назад)
+    MAIN_MENU = "main_menu"
+    # Пользовательские
+    # Главное меню
+    USER_GUIDES = "user_guides"
+    USER_CONTEST = "user_contest"
+    USER_TO_ADMIN = "user_to_admin"
+    USER_TO_NEWS = "user_to_news"
+    USER_TURNIP = "user_turnip"
+    # Меню гайдов
+    USER_FIND_GUIDE = "find_guide"
+    # Меню конкурсов
+    USER_CONTEST_INFO = "user_contest_info"
+    USER_CONTEST_SEND = "user_contest_send"
+    USER_CONTEST_JUDGE = "user_contest_judge"
+    # Администраторские
+    # Главное меню
+    ADM_CONTEST = "adm_contest"

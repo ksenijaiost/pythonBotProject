@@ -2,7 +2,7 @@ import os
 import telebot
 from dotenv import load_dotenv  # Импортируем функцию для загрузки переменных
 
-from constants import ButtonText
+from constants import ButtonText, ButtonCallback
 from menu import Menu
 
 # Загружаем переменные из .env
@@ -19,40 +19,47 @@ bot = telebot.TeleBot(TOKEN)
 admin_ids = list(map(int, os.getenv("ADMIN_ID_LIST", "").split(","))) if os.getenv("ADMIN_ID_LIST") else []
 
 
+# После нажатия старт - проверка в списке админов, выдача меню админа или пользователя
 @bot.message_handler(commands=['start'])
 def start(message):
     if message.chat.id in admin_ids:
-        markup = Menu.adm_menu()
+        main_menu = Menu.adm_menu()
         welcome_text = "Добро пожаловать, администратор! 👑"
     else:
-        markup = Menu.user_menu()
+        main_menu = Menu.user_menu()
         welcome_text = "Добро пожаловать! 😊"
 
     bot.send_message(
         message.chat.id,
-        welcome_text,
-        reply_markup=markup
+        f"✨ {welcome_text}\nВыберите действие:",
+        parse_mode="Markdown",
+        reply_markup=main_menu
     )
 
 
-@bot.message_handler(content_types=['text'])
-def handler(message):
-    if message.text == ButtonText.USER_GUIDES:
-        bot.send_message(message.chat.id, "Тут будут гайды", reply_markup=Menu.guides_menu())
-    if message.text == ButtonText.USER_CONTEST:
-        bot.send_message(message.chat.id, "Тут будет всё о конкурсах", reply_markup=Menu.contests_menu())
-    if message.text == ButtonText.MAIN_MENU:
-        bot.send_message(message.chat.id, "Вы в главном меню", reply_markup=Menu.user_menu())
-    if message.text == ButtonText.USER_GUIDE_SITE:
-        bot.send_message(message.chat.id, "Наш сайт с гайдами:", reply_markup=Menu.guide_link())
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_user_menu")
+# Обработчик кнопки "В главное меню"
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.MAIN_MENU)
 def handle_back(call):
-    bot.send_message(
+    if call.message.chat.id in admin_ids:
+        main_menu = Menu.adm_menu()
+    else:
+        main_menu = Menu.user_menu()
+    bot.edit_message_text(
+        "Главное меню. Выберите действие::",
         call.message.chat.id,
-        "Вы в главном меню",
-        reply_markup=Menu.user_menu()
+        call.message.message_id,
+        reply_markup=main_menu
+    )
+
+
+# Обработчик кнопки "Гайды"
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
+def handle_user_guides(call):
+    bot.edit_message_text(
+        "Меню гайдов. Выберите действие:",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=Menu.guides_menu()
     )
 
 
