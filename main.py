@@ -26,7 +26,7 @@ def start(message):
         welcome_text = "Добро пожаловать, администратор! 👑"
     else:
         markup = Menu.user_menu()
-        welcome_text = "Добро пожаловать, пользователь! 😊"
+        welcome_text = "Добро пожаловать! 😊"
 
     bot.send_message(
         message.chat.id,
@@ -41,23 +41,10 @@ def handler(message):
         bot.send_message(message.chat.id, "Тут будут гайды", reply_markup=Menu.guides_menu())
     if message.text == ButtonText.USER_CONTEST:
         bot.send_message(message.chat.id, "Тут будет всё о конкурсах", reply_markup=Menu.contests_menu())
-    if message.text == ButtonText.USER_MENU:
+    if message.text == ButtonText.MAIN_MENU:
         bot.send_message(message.chat.id, "Вы в главном меню", reply_markup=Menu.user_menu())
-
-
-def admin_required(func):
-    def wrapper(message):
-        if message.chat.id not in admin_ids:
-            bot.reply_to(message, "🚫 У вас нет прав администратора!")
-            return
-        return func(message)
-    return wrapper
-
-
-@bot.message_handler(commands=['admin'])
-@admin_required
-def admin_panel(message):
-    bot.send_message(message.chat.id, "Админ-панель:", reply_markup=Menu.adm_menu())
+    if message.text == ButtonText.USER_GUIDE_SITE:
+        bot.send_message(message.chat.id, "Наш сайт с гайдами - ", reply_markup=Menu.back_menu())
 
 
 bot.polling(none_stop=True)
