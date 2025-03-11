@@ -1,4 +1,8 @@
 class ButtonText:
+    # Кнопки назад
+    USER_BACK = "🔙 Назад"
+    USER_MENU = "🏠 В главное меню"
+
     # Пользовательские
     # Главное меню
     USER_GUIDES = "📚 Гайды"
@@ -9,9 +13,6 @@ class ButtonText:
     USER_HEAD_CHAT = "🐻 Наш чат Animal Crossing"
     USER_CHANEL = "📢 Наш канал"
     USER_CHAT_NINTENDO = "🎮 Чат с темами"
-    # Кнопки назад
-    USER_BACK = "🔙 Назад"
-    USER_MENU = "🏠 В главное меню"
     # Меню гайдов
     USER_GUIDE_SITE = "🌐 Перейти на сайт"
     USER_FIND_GUIDE = "🔍 Поиск по ключевым словам"
