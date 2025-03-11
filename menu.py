@@ -2,6 +2,7 @@ import telebot
 from telebot import types
 
 from constants import ButtonText
+from links import Links
 
 
 class Menu:
@@ -15,10 +16,27 @@ class Menu:
 
     @staticmethod
     def user_menu():
-        user_menu = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-        menu_button1 = types.KeyboardButton(ButtonText.USER_GUIDES)
-        menu_button2 = types.KeyboardButton(ButtonText.USER_CONTEST)
+        user_menu = types.InlineKeyboardMarkup()
+        menu_button1 = types.InlineKeyboardButton(
+            text=ButtonText.USER_GUIDES
+        )
+        menu_button2 = types.InlineKeyboardButton(
+            text=ButtonText.USER_CONTEST
+        )
+        menu_button3 = types.InlineKeyboardButton(
+            text=ButtonText.USER_HEAD_CHAT,
+            url=Links.get_chat_url()
+        )
+        menu_button4 = types.InlineKeyboardButton(
+            text=ButtonText.USER_CHANEL,
+            url=Links.get_channel_url()
+        )
+        menu_button5 = types.InlineKeyboardButton(
+            text=ButtonText.USER_CHAT_NINTENDO,
+            url=Links.get_nin_chat_url()
+        )
         user_menu.add(menu_button1, menu_button2)
+        user_menu.add(menu_button3, menu_button4, menu_button5)
         return user_menu
 
     @staticmethod
@@ -48,14 +66,14 @@ class Menu:
         return adm_menu
 
     @staticmethod
-    def guide_link_keyboard():
+    def guide_link():
         keyboard = types.InlineKeyboardMarkup()
         button1 = types.InlineKeyboardButton(
             text="Открыть сайт с гайдами",
             url="https://acnh.tilda.ws"
         )
         button2 = types.InlineKeyboardButton(
-            text="В главное меню",
+            text=ButtonText.MAIN_MENU,
             callback_data="back_to_user_menu"
         )
         keyboard.add(button1, button2)

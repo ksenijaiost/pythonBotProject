@@ -44,7 +44,7 @@ def handler(message):
     if message.text == ButtonText.MAIN_MENU:
         bot.send_message(message.chat.id, "Вы в главном меню", reply_markup=Menu.user_menu())
     if message.text == ButtonText.USER_GUIDE_SITE:
-        bot.send_message(message.chat.id, "Наш сайт с гайдами:", reply_markup=Menu.guide_link_keyboard())
+        bot.send_message(message.chat.id, "Наш сайт с гайдами:", reply_markup=Menu.guide_link())
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_user_menu")
