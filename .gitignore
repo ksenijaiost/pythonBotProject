@@ -1,0 +1,13 @@
+# JetBrains
+.idea/
+/.idea/
+*.iml
+
+# Виртуальное окружение
+/.venv/
+venv/
+.env
+
+# Кэш Python
+__pycache__/
+*.py[cod]
