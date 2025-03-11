@@ -86,4 +86,4 @@ def handle_adm_contest(call):
 
 
 if __name__ == '__main__':
-    bot.polling()
+    bot.infinity_polling(allowed_updates=['message', 'callback_query'])
