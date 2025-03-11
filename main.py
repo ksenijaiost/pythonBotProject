@@ -45,4 +45,19 @@ def handler(message):
         bot.send_message(message.chat.id, "Вы в главном меню", reply_markup=Menu.user_menu())
 
 
+def admin_required(func):
+    def wrapper(message):
+        if message.chat.id not in admin_ids:
+            bot.reply_to(message, "🚫 У вас нет прав администратора!")
+            return
+        return func(message)
+    return wrapper
+
+
+@bot.message_handler(commands=['admin'])
+@admin_required
+def admin_panel(message):
+    bot.send_message(message.chat.id, "Админ-панель:", reply_markup=Menu.adm_menu())
+
+
 bot.polling(none_stop=True)
