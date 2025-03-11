@@ -27,3 +27,6 @@
 3. Добавить гайд - добавить гайд в список.
 
 Для запуска необходим файл .env (пример заполнения - .env.example).
+Не забыть:
+1. pip install pyTelegramBotAPI
+2. pip install python-dotenv
