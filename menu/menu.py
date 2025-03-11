@@ -1,8 +1,7 @@
-import telebot
 from telebot import types
 
-from constants import ButtonText, ButtonCallback
-from links import Links
+from menu.constants import ButtonText, ButtonCallback
+from menu.links import Links
 
 
 class Menu:
@@ -110,3 +109,18 @@ class Menu:
         )
         adm_menu.add(adm_button1)
         return adm_menu
+
+    # Меню конкурсов (адм)
+    @staticmethod
+    def adm_contests_menu():
+        adm_contests_menu = types.InlineKeyboardMarkup(row_width=1)
+        adm_contests_button1 = types.InlineKeyboardButton(
+            text=ButtonText.ADM_CONTEST_INFO,
+            callback_data=ButtonCallback.ADM_CONTEST_INFO
+        )
+        adm_contests_button2 = types.InlineKeyboardButton(
+            text=ButtonText.MAIN_MENU,
+            callback_data=ButtonCallback.MAIN_MENU
+        )
+        adm_contests_menu.add(adm_contests_button1, adm_contests_button2)
+        return adm_contests_menu

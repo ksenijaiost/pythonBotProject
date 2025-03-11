@@ -24,6 +24,8 @@ class ButtonText:
     # Администраторские
     # Главное меню
     ADM_CONTEST = "Конкурс"
+    # Меню конкурсов
+    ADM_CONTEST_INFO = "Обновить информацию"
 
 
 class ButtonCallback:
@@ -45,3 +47,4 @@ class ButtonCallback:
     # Администраторские
     # Главное меню
     ADM_CONTEST = "adm_contest"
+    ADM_CONTEST_INFO = "adm_contest_info"
