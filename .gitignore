@@ -1,7 +1,9 @@
-# JetBrains
+# IDE
 .idea/
 /.idea/
 *.iml
+.vscode/
+/.vscode/
 
 # Виртуальное окружение
 /.venv/
