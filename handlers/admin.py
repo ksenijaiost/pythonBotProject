@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime
+import traceback
 from telebot import types
 
-from database.contest import ContestManager
+from database.contest import ContestManager, SubmissionManager, get_submission
 from handlers.envParams import admin_ids
 from bot_instance import bot
 from menu.constants import ButtonCallback
@@ -166,3 +167,87 @@ def handle_admin_input(message):
         )
         storage.clear(user_id)
         bot.send_message(message.chat.id, "✅ Данные обновлены!", reply_markup=Menu.back_adm_contest_menu())
+
+def process_approval(message, submission_id):
+    try:
+        # Только здесь генерируем номер
+        number = SubmissionManager.approve_submission(submission_id)
+        
+        submission = get_submission(submission_id)
+        user_id = submission['user_id']
+        
+        bot.send_message(
+            user_id,
+            f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
+            reply_markup=Menu.main_menu()
+        )
+        
+        bot.send_message(message.chat.id, f"Работа #{submission_id} одобрена как №{number}!")
+
+    except Exception as e:
+        handle_admin_error(message.chat.id, e)
+
+def process_rejection(message, submission_id):
+    try:
+        SubmissionManager.update_submission(submission_id, 'rejected', message.text)
+        
+        submission = get_submission(submission_id)
+        user_id = submission['user_id']
+        bot.send_message(
+            submission[1],
+            f"❌ Работа отклонена!\nПричина: {message.text}",
+            reply_markup=Menu.main_menu()
+        )
+        
+        bot.send_message(message.chat.id, f"Работа #{submission_id} отклонена!")
+        
+    except Exception as e:
+        handle_admin_error(message.chat.id, e)
+
+
+def handle_admin_error(chat_id, error):
+    """Обработка ошибок в админских функциях"""
+    error_msg = (
+        "⚠️ *Ошибка администратора*\n"
+        f"```{str(error)}```\n"
+        "Пожалуйста, проверьте логи для деталей."
+    )
+    
+    try:
+        bot.send_message(
+            chat_id, 
+            error_msg, 
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Не удалось отправить сообщение об ошибке: {e}")
+    
+    # Логирование в консоль
+    print(f"\n❌ ADMIN ERROR [{datetime.now()}]:")
+    traceback.print_exc()
+    
+    # Логирование в файл (опционально)
+    with open("admin_errors.log", "a") as f:
+        f.write(f"\n[{datetime.now()}] {traceback.format_exc()}\n")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST_RESET)
+def handle_adm_contest_reset(call):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ Подтвердить сброс", callback_data="confirm_reset"),
+        types.InlineKeyboardButton("❌ Отменить", callback_data="cancel_reset")
+    )
+    
+    current_count = SubmissionManager.get_current_number()
+    bot.send_message(
+        call.message.chat.id,
+        f"⚠️ Текущее количество участников: {current_count}\n"
+        "Вы уверены, что хотите сбросить счетчик?",
+        reply_markup=markup
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data == "confirm_reset")
+def confirm_reset(call):
+    SubmissionManager.reset_counter()
+    bot.send_message(call.message.chat.id, "✅ Счетчик участников сброшен!", reply_markup=Menu.adm_contests_menu())

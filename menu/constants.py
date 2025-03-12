@@ -26,6 +26,7 @@ class ButtonText:
     ADM_CONTEST = "Конкурс"
     # Меню конкурсов
     ADM_CONTEST_INFO = "Обновить информацию"
+    ADM_CONTEST_RESET = "Сбросить счётчик работ"
 
 
 class ButtonCallback:
@@ -50,10 +51,11 @@ class ButtonCallback:
     # Главное меню
     ADM_CONTEST = "adm_contest"
     ADM_CONTEST_INFO = "adm_contest_info"
+    ADM_CONTEST_RESET = "adm_consest_reset"
 
 
 class ConstantLinks:
     # Сайт
-    SITE = ''
+    SITE = "https://acnh.tilda.ws"
     # Конкурсы
-    CONTEST_LINK = 'https://teletype.in/@isabelle_acnh/acnhchatru-contests'
+    CONTEST_LINK = "https://teletype.in/@isabelle_acnh/acnhchatru-contests"

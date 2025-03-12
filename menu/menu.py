@@ -1,6 +1,6 @@
 from telebot import types
 
-from menu.constants import ButtonText, ButtonCallback
+from menu.constants import ButtonText, ButtonCallback, ConstantLinks
 from menu.links import Links
 
 
@@ -97,7 +97,7 @@ class Menu:
         guides_menu = types.InlineKeyboardMarkup(row_width=1)
         guides_button1 = types.InlineKeyboardButton(
             text=ButtonText.USER_GUIDE_SITE,
-            url="https://acnh.tilda.ws"
+            url=ConstantLinks.SITE
         )
         guides_button2 = types.InlineKeyboardButton(
             text=ButtonText.USER_FIND_GUIDE,
@@ -156,8 +156,12 @@ class Menu:
             callback_data=ButtonCallback.ADM_CONTEST_INFO
         )
         adm_contests_button2 = types.InlineKeyboardButton(
+            text=ButtonText.ADM_CONTEST_RESET,
+            callback_data=ButtonCallback.ADM_CONTEST_RESET
+        )
+        adm_contests_button3 = types.InlineKeyboardButton(
             text=ButtonText.MAIN_MENU,
             callback_data=ButtonCallback.MAIN_MENU
         )
-        adm_contests_menu.add(adm_contests_button1, adm_contests_button2)
+        adm_contests_menu.add(adm_contests_button1, adm_contests_button2, adm_contests_button3)
         return adm_contests_menu
