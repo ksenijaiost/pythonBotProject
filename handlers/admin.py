@@ -48,6 +48,19 @@ ADMIN_STEPS = {
     'end_date_of_admission': 'Введите дату окончания приёма работ (ДД.ММ.ГГГГ):'
 }
 
+
+# Меню конкурсов для админа
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST)
+def handle_adm_contest(call):
+    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    bot.edit_message_text(
+        "Меню конкурсов (адм). Выберите действие:",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=Menu.adm_contests_menu()
+    )
+
+
 # Обработчик кнопки "Обновить информацию" в админ-меню
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST_INFO)
 def start_contest_update(call):

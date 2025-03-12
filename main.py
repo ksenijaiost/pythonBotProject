@@ -42,49 +42,5 @@ def handle_back(call):
     )
 
 
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
-def handle_user_guides(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
-    bot.edit_message_text(
-        "Меню гайдов. Выберите действие:",
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=Menu.guides_menu()
-    )
-
-
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
-def handle_user_guides(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
-    bot.edit_message_text(
-        "Меню конкурсов. Выберите действие:",
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=Menu.contests_menu()
-    )
-
-
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST_INFO)
-def handle_user_guides(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
-    bot.edit_message_text(
-        "Информация о конкурсе:\n",
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=Menu.contests_menu()
-    )
-
-
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST)
-def handle_adm_contest(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
-    bot.edit_message_text(
-        "Меню конкурсов (адм). Выберите действие:",
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=Menu.adm_contests_menu()
-    )
-
-
 if __name__ == '__main__':
     bot.infinity_polling(allowed_updates=['message', 'callback_query'])
