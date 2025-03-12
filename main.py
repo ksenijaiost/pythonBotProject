@@ -1,6 +1,7 @@
 from bot_instance import bot
 import handlers.admin
-import database
+import handlers.user
+import database.contest
 from handlers.envParams import admin_ids
 from menu.constants import ButtonCallback
 from menu.menu import Menu

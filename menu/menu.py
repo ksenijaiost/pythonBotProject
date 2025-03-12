@@ -6,10 +6,47 @@ from menu.links import Links
 
 class Menu:
     @staticmethod
-    def back_menu():
-        back_menu = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-        menu_button1 = types.KeyboardButton(ButtonText.BACK)
-        menu_button2 = types.KeyboardButton(ButtonText.MAIN_MENU)
+    def back_user_contest_menu():
+        """Пользовательское меню - назад к конкурсам"""
+        back_menu = types.InlineKeyboardMarkup(row_width=1)
+        menu_button1 = types.InlineKeyboardButton(
+            text=ButtonText.BACK,
+            callback_data=ButtonCallback.USER_CONTEST
+        )
+        menu_button2 = types.InlineKeyboardButton(
+            text=ButtonText.MAIN_MENU,
+            callback_data=ButtonCallback.MAIN_MENU
+        )
+        back_menu.add(menu_button1, menu_button2)
+        return back_menu
+
+    @staticmethod
+    def back_user_guide_menu():
+        """Пользовательское меню - назад к гайдам"""
+        back_menu = types.InlineKeyboardMarkup(row_width=1)
+        menu_button1 = types.InlineKeyboardButton(
+            text=ButtonText.BACK,
+            callback_data=ButtonCallback.USER_GUIDE
+        )
+        menu_button2 = types.InlineKeyboardButton(
+            text=ButtonText.MAIN_MENU,
+            callback_data=ButtonCallback.MAIN_MENU
+        )
+        back_menu.add(menu_button1, menu_button2)
+        return back_menu
+
+    @staticmethod
+    def back_adm_contest_menu():
+        """Административное меню - назад к конкурсам"""
+        back_menu = types.InlineKeyboardMarkup(row_width=1)
+        menu_button1 = types.InlineKeyboardButton(
+            text=ButtonText.BACK,
+            callback_data=ButtonCallback.ADM_CONTEST
+        )
+        menu_button2 = types.InlineKeyboardButton(
+            text=ButtonText.MAIN_MENU,
+            callback_data=ButtonCallback.MAIN_MENU
+        )
         back_menu.add(menu_button1, menu_button2)
         return back_menu
 

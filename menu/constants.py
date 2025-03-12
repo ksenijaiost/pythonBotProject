@@ -29,7 +29,9 @@ class ButtonText:
 
 
 class ButtonCallback:
-    # В главное меню (назад)
+    # Назад
+    BACK_CONTEST = "back_contest"
+    BACK_GUIDE = "back_guide"
     MAIN_MENU = "main_menu"
     # Пользовательские
     # Главное меню
@@ -48,3 +50,10 @@ class ButtonCallback:
     # Главное меню
     ADM_CONTEST = "adm_contest"
     ADM_CONTEST_INFO = "adm_contest_info"
+
+
+class ConstantLinks:
+    # Сайт
+    SITE = ''
+    # Конкурсы
+    CONTEST_LINK = 'https://teletype.in/@isabelle_acnh/acnhchatru-contests'
