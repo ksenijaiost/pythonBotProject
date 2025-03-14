@@ -3,49 +3,48 @@ import json
 import sqlite3
 import os
 
-
-def init_db():
-    """Инициализация БД"""
-    if not os.path.exists('database'):
-        os.makedirs('database')
-        
-    conn = sqlite3.connect('database/contests.db')
-    c = conn.cursor()
-
-    # Таблица для инфо о конкурсе
-    c.execute('''CREATE TABLE IF NOT EXISTS contests
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  theme TEXT NOT NULL,
-                  description TEXT NOT NULL,
-                  contest_date TEXT NOT NULL,
-                  end_date_of_admission TEXT NOT NULL)''')
-    
-    # Таблица для работ
-    c.execute('''CREATE TABLE IF NOT EXISTS submissions
-                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                photos TEXT NOT NULL,
-                caption TEXT,
-                status TEXT DEFAULT 'pending',
-                reason TEXT,
-                submission_number INTEGER,
-                timestamp DATETIME)''')
-
-    # Таблица для счетчиков
-    c.execute('''CREATE TABLE IF NOT EXISTS counters
-                (name TEXT PRIMARY KEY,
-                value INTEGER)''')
-    # Инициализация счетчика
-    c.execute("INSERT OR IGNORE INTO counters VALUES ('submission', 0)")
-
-    conn.commit()
-    conn.close()
-
-
-init_db()
-
-
 class ContestManager:
+    def _init_db():
+        """Инициализация БД"""
+        if not os.path.exists('database'):
+            os.makedirs('database')
+            
+        conn = sqlite3.connect('database/contests.db')
+        c = conn.cursor()
+
+        # Таблица для инфо о конкурсе
+        c.execute('''CREATE TABLE IF NOT EXISTS contests
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    theme TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    contest_date TEXT NOT NULL,
+                    end_date_of_admission TEXT NOT NULL)''')
+        
+        # Таблица для работ
+        c.execute('''CREATE TABLE IF NOT EXISTS submissions
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    photos TEXT NOT NULL,
+                    caption TEXT,
+                    status TEXT DEFAULT 'pending',
+                    reason TEXT,
+                    submission_number INTEGER,
+                    timestamp DATETIME)''')
+
+        # Таблица для счетчиков
+        c.execute('''CREATE TABLE IF NOT EXISTS counters
+                    (name TEXT PRIMARY KEY,
+                    value INTEGER)''')
+        # Инициализация счетчика
+        c.execute("INSERT OR IGNORE INTO counters VALUES ('submission', 0)")
+
+        conn.commit()
+        conn.close()
+
+
+    _init_db()
+
+
     @staticmethod
     def update_contest(theme, description, contest_date, end_date_of_admission):
         ContestManager._init_db()
