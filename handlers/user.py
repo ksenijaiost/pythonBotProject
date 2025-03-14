@@ -4,10 +4,19 @@ from telebot import types
 import time
 from database.contest import ContestManager
 from bot_instance import bot
-from handlers.envParams import ADMIN_USERNAME, CONTEST_CHAT_ID
+from handlers.envParams import ADMIN_USERNAME, CHAT_ID, CONTEST_CHAT_ID
+from menu.links import Links
 from menu.menu import Menu
 from menu.constants import ButtonCallback, ButtonText, ConstantLinks
 
+
+def is_user_in_chat(user_id):
+    try:
+        chat_member = bot.get_chat_member(CHAT_ID, user_id)
+        return chat_member.status not in ['left', 'kicked']
+    except Exception as e:
+        print(f"Ошибка проверки участника чата: {e}")
+        return False
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
 def handle_user_guides(call):
@@ -123,6 +132,15 @@ class ContestSubmission:
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST_SEND)
 def start_contest_submission(call):
     try:
+        # Проверяем, состоит ли пользователь в чате
+        if not is_user_in_chat(call.from_user.id):
+            bot.send_message(
+                call.message.chat.id,
+                "❌ Для участия в конкурсе необходимо состоять в нашем чате!\n" + Links.get_chat_url(),
+                reply_markup=Menu.contests_menu()
+            )
+            return
+
         user_id = call.from_user.id
         user_submissions[user_id] = ContestSubmission()
         
@@ -134,7 +152,7 @@ def start_contest_submission(call):
         
     except Exception as e:
         print(f"Ошибка начала отправки: {e}")
-        bot.answer_callback_query(call.id, "❌ Ошибка начала отправки", show_alert=True)
+        handle_submission_error(call.from_user.id, e)
 
 # Обработчик отправки работ
 @bot.message_handler(content_types=['photo', 'text'], func=lambda m: m.from_user.id in user_submissions)

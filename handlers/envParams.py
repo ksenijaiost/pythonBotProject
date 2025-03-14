@@ -10,3 +10,4 @@ admin_ids = list(map(int, os.getenv("ADMIN_ID_LIST", "").split(","))) if os.gete
 
 CONTEST_CHAT_ID = os.getenv("CONTEST_CHAT_ID")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+CHAT_ID = os.getenv("CHAT_ID").lstrip("@")
