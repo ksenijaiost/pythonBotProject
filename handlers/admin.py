@@ -459,3 +459,25 @@ def reject_work(call):
 
     except Exception as e:
         handle_admin_error(call.message.chat.id, e)
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.ADM_TURNIP
+)
+def handle_adm_turnip(call):
+    bot.edit_message_text(
+            f"На данный момент работа с репой отключена",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=Menu.adm_menu(),
+        )
+    
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.ADM_ADD_GUIDE
+)
+def handle_adm_add_guide(call):
+    bot.edit_message_text(
+            f"На данный момент работа с гайдами через бота отключена",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=Menu.adm_menu(),
+        )
