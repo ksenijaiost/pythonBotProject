@@ -33,7 +33,7 @@ def is_user_in_chat(user_id):
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
 def handle_user_guides(call):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "Меню гайдов. Выберите действие:",
         call.message.chat.id,
@@ -47,7 +47,7 @@ def handle_user_guides(call):
 )
 def handle_user_find_guide(call):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "На данный момент поиск недоступен, но Вы можете посмотреть все гайды на нашем сайте",
         call.message.chat.id,
@@ -59,7 +59,7 @@ def handle_user_find_guide(call):
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
 def handle_user_guides(call):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "Меню конкурсов. Выберите действие:",
         call.message.chat.id,

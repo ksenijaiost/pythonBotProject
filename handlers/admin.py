@@ -63,7 +63,7 @@ ADMIN_STEPS = {
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST)
 def handle_adm_contest(call):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "Меню конкурсов (адм). Выберите действие:",
         call.message.chat.id,
@@ -174,8 +174,9 @@ def handle_reset_info(call):
 def handle_reset_info(call):
     storage.clear
     bot.edit_message_text(
-        call.message.chat.id,
         "Данные очищены",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
         reply_markup=Menu.back_adm_contest_menu(),
     )
 
@@ -184,7 +185,7 @@ def handle_reset_info(call):
 @bot.callback_query_handler(func=lambda call: call.data == "confirm_update")
 def start_contest_update(call):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     if call.message.chat.id not in admin_ids:
         return
     storage.set_user_step(call.from_user.id, "theme")
@@ -252,14 +253,15 @@ def show_stats(call):
         approved = SubmissionManager.get_approved_count()
         rejected = SubmissionManager.get_rejected_count()
 
-        bot.send_message(
-            chat_id=call.message.chat.id,
+        bot.edit_message_text(
             text=(
                 f"📊 *Статистика конкурса:*\n\n"
                 f"⏳ Ожидают проверки: `{pending}`\n"
                 f"✅ Одобрено работ: `{approved}`\n"
                 f"✅ Отклонено работ: `{rejected}`"
             ),
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
             parse_mode="MarkdownV2",  # Явно указываем режим разметки
             reply_markup=Menu.adm_stat_menu(),
         )

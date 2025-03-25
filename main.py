@@ -16,7 +16,7 @@ logging.basicConfig(
 @bot.message_handler(commands=["start"])
 def start(message):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {message}, chat_id: {message.chat.id}")
+    logger.debug(f"Received callback: {message}, chat_id: {message.chat.id}")
     if message.chat.id in admin_ids:
         main_menu = Menu.adm_menu()
         welcome_text = "Добро пожаловать, администратор! 👑"
@@ -36,7 +36,7 @@ def start(message):
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.MAIN_MENU)
 def handle_back(call):
     logger = logging.getLogger(__name__)
-    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     if call.message.chat.id in admin_ids:
         main_menu = Menu.adm_menu()
     else:
