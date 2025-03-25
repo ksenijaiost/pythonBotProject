@@ -12,3 +12,33 @@ KeyError: 1
                  ^^^^^^^^^^^^^^
 AttributeError: type object 'Menu' has no attribute 'main_menu'. Did you mean: 'adm_menu'?
 
+
+[2025-03-25 12:21:02.997137] Traceback (most recent call last):
+  File "D:\DKA\dev\VSC_Projects\pythonBotProject\handlers\admin.py", line 211, in show_stats
+    bot.send_message(
+    ~~~~~~~~~~~~~~~~^
+        call.message.chat.id,
+        ^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        reply_markup=Menu.back_adm_contest_menu(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\__init__.py", line 1800, in send_message
+    apihelper.send_message(
+    ~~~~~~~~~~~~~~~~~~~~~~^
+        self.token, chat_id, text,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        reply_parameters=reply_parameters, link_preview_options=link_preview_options, business_connection_id=business_connection_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        message_effect_id=message_effect_id, allow_paid_broadcast=allow_paid_broadcast))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\apihelper.py", line 275, in send_message
+    return _make_request(token, method_url, params=payload, method='post')
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\apihelper.py", line 168, in _make_request
+    json_result = _check_result(method_name, result)
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\apihelper.py", line 195, in _check_result
+    raise ApiTelegramException(method_name, result, result_json)
+telebot.apihelper.ApiTelegramException: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: unsupported parse_mode
+

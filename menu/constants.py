@@ -27,11 +27,13 @@ class ButtonText:
     ADM_TURNIP = "Репка"
     ADM_ADD_GUIDE = "Добавить гайд"
     # Меню конкурсов
-    ADM_CONTEST_INFO = "Обновить информацию"
-    ADM_CONTEST_RESET = "Сбросить счётчик работ"
+    ADM_CONTEST_INFO = "Информация о конкурсе"
     ADM_REVIEW_WORKS = "👁 Проверить работы"
+    ADM_CONTEST_STATS = "Статистика по конкурсу"
     ADM_APPROVE = "✅ Одобрить"
     ADM_REJECT = "❌ Отклонить"
+    ADM_CONTEST_RESET = "Сбросить счётчик работ"
+
 
 class ButtonCallback:
     # Назад
@@ -60,6 +62,7 @@ class ButtonCallback:
     ADM_CONTEST_INFO = "adm_contest_info"
     ADM_CONTEST_RESET = "adm_consest_reset"
     ADM_REVIEW_WORKS = "adm_review_works"
+    ADM_CONTEST_STATS = "stats"
     ADM_APPROVE = "adm_approve_"
     ADM_REJECT = "adm_reject_"
 
@@ -68,4 +71,4 @@ class ConstantLinks:
     # Сайт
     SITE = "https://acnh.tilda.ws"
     # Конкурсы
-    CONTEST_LINK = "https://teletype.in/@isabelle_acnh/acnhchatru-contests"
+    CONTEST_LINK = "https://acnh.tilda.ws/contest#rules"

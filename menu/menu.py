@@ -26,7 +26,7 @@ class Menu:
         back_menu = types.InlineKeyboardMarkup(row_width=1)
         back_menu.add(
             types.InlineKeyboardButton(
-                text=ButtonText.BACK, callback_data=ButtonCallback.USER_GUIDE
+                text=ButtonText.BACK, callback_data=ButtonCallback.USER_GUIDES
             ),
             types.InlineKeyboardButton(
                 text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
@@ -156,21 +156,45 @@ class Menu:
     # Меню конкурсов (адм)
     @staticmethod
     def adm_contests_menu():
+        """Административное меню конкурсов"""
         menu = types.InlineKeyboardMarkup()
         menu.add(
             types.InlineKeyboardButton(
-                ButtonText.ADM_CONTEST_INFO,
+                text=ButtonText.ADM_CONTEST_INFO,
                 callback_data=ButtonCallback.ADM_CONTEST_INFO,
             ),
             types.InlineKeyboardButton(
-                ButtonText.ADM_REVIEW_WORKS,
+                text=ButtonText.ADM_REVIEW_WORKS,
                 callback_data=ButtonCallback.ADM_REVIEW_WORKS,
             ),
         )
         menu.add(
             types.InlineKeyboardButton(
-                ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
-            )
+                text=ButtonText.ADM_CONTEST_STATS,
+                callback_data=ButtonCallback.ADM_CONTEST_STATS,
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            ),
+        )
+
+        return menu
+    
+    @staticmethod
+    def adm_stat_menu():
+        menu = types.InlineKeyboardMarkup()
+        menu.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.ADM_CONTEST_RESET, callback_data=ButtonCallback.ADM_CONTEST_RESET
+            ),
+        )
+        menu.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.BACK, callback_data=ButtonCallback.ADM_CONTEST
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            ),
         )
 
         return menu

@@ -185,6 +185,38 @@ class SubmissionManager:
         finally:
             conn.close()
 
+    @staticmethod
+    def get_pending_count():
+        """Возвращает количество работ на модерации"""
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM submissions WHERE status = 'pending'")
+            return c.fetchone()[0]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_approved_count():
+        """Возвращает количество одобренных работ"""
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM submissions WHERE status = 'approved'")
+            return c.fetchone()[0]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_rejected_count():
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM submissions WHERE status = 'rejected'")
+            return c.fetchone()[0]
+        finally:
+            conn.close()
+
 
 def get_submission(submission_id):
     """Получение данных о заявке по ID"""
