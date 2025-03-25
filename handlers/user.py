@@ -4,7 +4,7 @@ import threading
 from venv import logger
 from telebot import types
 import time
-from database.contest import ContestManager, SubmissionManager
+from database.contest import ContestManager, SubmissionManager, is_user_approved, user_submissions
 from bot_instance import bot
 from handlers.envParams import ADMIN_USERNAME, CHAT_ID, CONTEST_CHAT_ID, CHAT_USERNAME
 from menu.links import Links
@@ -18,40 +18,6 @@ from weakref import WeakValueDictionary
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-
-
-class SubmissionStorage:
-    def __init__(self):
-        self.data = {}
-        self.lock = Lock()
-        self.timers = {}
-
-    def add(self, user_id, submission):
-        with self.lock:
-            self.data[user_id] = submission
-            self.timers[user_id] = time.time()
-
-    def get(self, user_id):
-        with self.lock:
-            return self.data.get(user_id)
-
-    def exists(self, user_id):
-        with self.lock:
-            return user_id in self.data
-
-    def remove(self, user_id):
-        with self.lock:
-            if user_id in self.data:
-                del self.data[user_id]
-                if user_id in self.timers:
-                    del self.timers[user_id]
-
-    def get_all_users(self):
-        with self.lock:
-            return list(self.data.keys())
-
-
-user_submissions = SubmissionStorage()
 
 
 def is_user_in_chat(user_id):
@@ -205,9 +171,11 @@ def start_contest_submission(call):
     try:
         user_id = call.from_user.id
         # Проверка через метод exists
-        if user_submissions.exists(user_id):
+        if user_submissions.exists(user_id) or is_user_approved(user_id):
             bot.answer_callback_query(
-                call.id, "⚠️ Вы уже начали отправку работы!", show_alert=True
+                call.id,
+                "⚠️ Вы уже отправляли работу! Если хотите изменить работу, свяжитесь с админами.",
+                show_alert=True,
             )
             return
 

@@ -2,6 +2,8 @@ from datetime import datetime
 import json
 import sqlite3
 import os
+from threading import Lock
+import time
 
 
 class ContestManager:
@@ -34,6 +36,14 @@ class ContestManager:
                     reason TEXT,
                     submission_number INTEGER,
                     timestamp DATETIME)"""
+        )
+
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS approved_submissions (
+                user_id INTEGER NOT NULL,
+                submission_id INTEGER NOT NULL,
+                PRIMARY KEY (user_id, submission_id)
+            )"""
         )
 
         # Таблица для счетчиков
@@ -131,10 +141,24 @@ class SubmissionManager:
     @staticmethod
     def reset_counter():
         conn = sqlite3.connect("database/contests.db")
-        c = conn.cursor()
-        c.execute("UPDATE counters SET value = 0 WHERE name = 'submission'")
-        conn.commit()
-        conn.close()
+        try:
+            c = conn.cursor()
+            
+            # Обнуляем счетчик
+            c.execute("UPDATE counters SET value = 0 WHERE name = 'submission'")
+            
+            # Очищаем все заявки
+            c.execute("DELETE FROM submissions")
+            
+            # Очищаем подтвержденные работы
+            c.execute("DELETE FROM approved_submissions")
+            
+            # Сбрасываем автоинкремент для чистого старта
+            c.execute("DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions')")
+            
+            conn.commit()
+        finally:
+            conn.close()
 
     @staticmethod
     def get_current_number():
@@ -163,6 +187,14 @@ class SubmissionManager:
                             SET status = 'approved', submission_number = ?
                             WHERE id = ?""",
                     (number, submission_id),
+                )
+
+                c.execute(
+                    """
+                    INSERT INTO approved_submissions (user_id, submission_id) 
+                    VALUES ((SELECT user_id FROM submissions WHERE id = ?), ?)
+                """,
+                    (submission_id, submission_id),
                 )
             return number
         finally:
@@ -218,6 +250,40 @@ class SubmissionManager:
             conn.close()
 
 
+class SubmissionStorage:
+    def __init__(self):
+        self.data = {}
+        self.lock = Lock()
+        self.timers = {}
+
+    def add(self, user_id, submission):
+        with self.lock:
+            self.data[user_id] = submission
+            self.timers[user_id] = time.time()
+
+    def get(self, user_id):
+        with self.lock:
+            return self.data.get(user_id)
+
+    def exists(self, user_id):
+        with self.lock:
+            return user_id in self.data
+
+    def remove(self, user_id):
+        with self.lock:
+            if user_id in self.data:
+                del self.data[user_id]
+                if user_id in self.timers:
+                    del self.timers[user_id]
+
+    def get_all_users(self):
+        with self.lock:
+            return list(self.data.keys())
+
+
+user_submissions = SubmissionStorage()
+
+
 def get_submission(submission_id):
     """Получение данных о заявке по ID"""
     conn = sqlite3.connect("database/contests.db")
@@ -249,3 +315,16 @@ def get_submission(submission_id):
         raise e
     finally:
         conn.close()
+
+
+def is_user_approved(user_id):  # Убрать self
+    conn = sqlite3.connect("database/contests.db")
+    cursor = conn.execute(
+        """
+        SELECT COUNT(*) FROM approved_submissions WHERE user_id = ?
+        """,
+        (user_id,),
+    )
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count > 0

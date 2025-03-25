@@ -42,3 +42,29 @@ AttributeError: type object 'Menu' has no attribute 'main_menu'. Did you mean: '
     raise ApiTelegramException(method_name, result, result_json)
 telebot.apihelper.ApiTelegramException: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: unsupported parse_mode
 
+
+[2025-03-25 17:20:16.789542] Traceback (most recent call last):
+  File "D:\DKA\dev\VSC_Projects\pythonBotProject\handlers\admin.py", line 411, in show_submission_details
+    bot.edit_message_text(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        call.message.chat.id,
+        ^^^^^^^^^^^^^^^^^^^^^
+        f"Действия для работы #{submission_id}:",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        reply_markup=markup,
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\__init__.py", line 4974, in edit_message_text
+    result = apihelper.edit_message_text(
+        self.token, text, chat_id=chat_id, message_id=message_id, inline_message_id=inline_message_id,
+        parse_mode=parse_mode, entities=entities, reply_markup=reply_markup, link_preview_options=link_preview_options,
+        business_connection_id=business_connection_id, timeout=timeout)
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\apihelper.py", line 1507, in edit_message_text
+    return _make_request(token, method_url, params=payload, method='post')
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\apihelper.py", line 168, in _make_request
+    json_result = _check_result(method_name, result)
+  File "c:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\telebot\apihelper.py", line 195, in _check_result
+    raise ApiTelegramException(method_name, result, result_json)
+telebot.apihelper.ApiTelegramException: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: chat not found
+

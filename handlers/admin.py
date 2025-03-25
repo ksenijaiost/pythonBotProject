@@ -3,7 +3,12 @@ from datetime import datetime
 import traceback
 from telebot import types
 
-from database.contest import ContestManager, SubmissionManager, get_submission
+from database.contest import (
+    ContestManager,
+    SubmissionManager,
+    get_submission,
+    user_submissions,
+)
 from handlers.envParams import admin_ids
 from bot_instance import bot
 from menu.constants import ButtonCallback, ButtonText
@@ -108,7 +113,7 @@ def start_contest_update(call):
                 ),
                 types.InlineKeyboardButton(
                     text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
-                )
+                ),
             )
         else:
             text += "⚠️ Активных конкурсов не найдено.\nХотите создать новый?"
@@ -144,26 +149,26 @@ def handle_cancel_update(call):
         reply_markup=Menu.back_adm_contest_menu(),
     )
 
+
 # Обработчик сброса данных
 @bot.callback_query_handler(func=lambda call: call.data == "reset_info")
 def handle_reset_info(call):
     markup = types.InlineKeyboardMarkup()
     text = "Точно очистить данные с информацией о текущем конкурсе?"
     markup.row(
-                types.InlineKeyboardButton(
-                    "✅ Да, очистить", callback_data="confirm_reset_info"
-                ),
-                types.InlineKeyboardButton(
-                    "❌ Нет, отменить", callback_data="cancel_update"
-                ),
-            )
+        types.InlineKeyboardButton(
+            "✅ Да, очистить", callback_data="confirm_reset_info"
+        ),
+        types.InlineKeyboardButton("❌ Нет, отменить", callback_data="cancel_update"),
+    )
     bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            text=text,
-            parse_mode="Markdown",
-            reply_markup=markup,
-        )
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=text,
+        parse_mode="Markdown",
+        reply_markup=markup,
+    )
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "confirm_reset_info")
 def handle_reset_info(call):
@@ -173,6 +178,7 @@ def handle_reset_info(call):
         "Данные очищены",
         reply_markup=Menu.back_adm_contest_menu(),
     )
+
 
 # Обработчик подтверждения обновления
 @bot.callback_query_handler(func=lambda call: call.data == "confirm_update")
@@ -269,7 +275,7 @@ def process_rejection(message, submission_id):
         submission = get_submission(submission_id)
         user_id = submission["user_id"]
         bot.send_message(
-            submission["user_id"],
+            user_id,
             f"❌ Работа отклонена!\nПричина: {message.text}",
             reply_markup=Menu.back_user_contest_menu(),
         )
@@ -303,10 +309,6 @@ def handle_admin_error(chat_id, error):
     logger.error(f"\n❌ ADMIN ERROR [{datetime.now()}]:")
     traceback.print_exc()
 
-    # Логирование в файл (опционально)
-    with open("admin_errors.log", "a") as f:
-        f.write(f"\n[{datetime.now()}] {traceback.format_exc()}\n")
-
 
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.ADM_CONTEST_RESET
@@ -322,9 +324,12 @@ def handle_adm_contest_reset(call):
 
     current_count = SubmissionManager.get_current_number()
     bot.edit_message_text(
-        call.message.chat.id,
-        f"⚠️ Текущее количество участников: {current_count}\n"
-        "Вы уверены, что хотите сбросить счетчик?",
+        text=(  # Явное указание текста
+            f"⚠️ Текущее количество участников: {current_count}\n"
+            "Вы уверены, что хотите сбросить счетчик?"
+        ),
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
         reply_markup=markup,
     )
 
@@ -332,9 +337,15 @@ def handle_adm_contest_reset(call):
 @bot.callback_query_handler(func=lambda call: call.data == "confirm_reset")
 def confirm_reset(call):
     SubmissionManager.reset_counter()
+    logger = logging.getLogger(__name__)
+    logger.debug("Обнуление данных - сброс счётчика")
+    logger.debug(SubmissionManager.get_pending_count())  # Должно быть 0
+    logger.debug(SubmissionManager.get_approved_count())  # Должно быть 0
+    logger.debug(SubmissionManager.get_current_number())  # Должно быть 0
     bot.edit_message_text(
-        call.message.chat.id,
-        "✅ Счетчик участников сброшен!",
+        text="✅ Счетчик участников сброшен!",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
     )
 
@@ -342,7 +353,12 @@ def confirm_reset(call):
 @bot.callback_query_handler(func=lambda call: call.data == "cancel_reset")
 def handle_cancel_reset(call):
     bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.edit_message_text(call.message.chat.id, "❌ Сброс счетчика отменен", reply_markup=Menu.back_adm_contest_menu)
+    bot.edit_message_text(
+        text="❌ Сброс счетчика отменен",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=Menu.back_adm_contest_menu,
+    )
 
 
 @bot.callback_query_handler(
@@ -408,7 +424,7 @@ def show_submission_details(call):
             ),
         )
 
-        bot.edit_message_text(
+        bot.send_message(
             call.message.chat.id,
             f"Действия для работы #{submission_id}:",
             reply_markup=markup,
@@ -426,9 +442,14 @@ def approve_work(call):
         submission_id = int(call.data.replace(ButtonCallback.ADM_APPROVE, ""))
         number = SubmissionManager.approve_submission(submission_id)
 
-        submission = get_submission(submission_id)
+        submission = get_submission(submission_id)  # Получаем данные работы
+        user_id = submission["user_id"]  # Извлекаем ID пользователя
+
+        # Удаляем пользователя из временного хранилища
+        user_submissions.remove(user_id)
+
         bot.send_message(
-            submission["user_id"],
+            user_id,
             f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
             reply_markup=Menu.back_user_contest_menu(),
         )
@@ -460,24 +481,22 @@ def reject_work(call):
     except Exception as e:
         handle_admin_error(call.message.chat.id, e)
 
-@bot.callback_query_handler(
-    func=lambda call: call.data == ButtonCallback.ADM_TURNIP
-)
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_TURNIP)
 def handle_adm_turnip(call):
     bot.edit_message_text(
-            f"На данный момент работа с репой отключена",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=Menu.adm_menu(),
-        )
-    
-@bot.callback_query_handler(
-    func=lambda call: call.data == ButtonCallback.ADM_ADD_GUIDE
-)
+        f"На данный момент работа с репой отключена",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=Menu.adm_menu(),
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_ADD_GUIDE)
 def handle_adm_add_guide(call):
     bot.edit_message_text(
-            f"На данный момент работа с гайдами через бота отключена",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=Menu.adm_menu(),
-        )
+        f"На данный момент работа с гайдами через бота отключена",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=Menu.adm_menu(),
+    )
