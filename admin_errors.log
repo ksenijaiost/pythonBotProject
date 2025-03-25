@@ -1,0 +1,14 @@
+
+[2025-03-25 11:14:35.027307] Traceback (most recent call last):
+  File "D:\DKA\dev\VSC_Projects\pythonBotProject\handlers\admin.py", line 212, in process_rejection
+    submission[1],
+    ~~~~~~~~~~^^^
+KeyError: 1
+
+
+[2025-03-25 11:18:34.475731] Traceback (most recent call last):
+  File "D:\DKA\dev\VSC_Projects\pythonBotProject\handlers\admin.py", line 214, in process_rejection
+    reply_markup=Menu.main_menu()
+                 ^^^^^^^^^^^^^^
+AttributeError: type object 'Menu' has no attribute 'main_menu'. Did you mean: 'adm_menu'?
+

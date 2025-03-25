@@ -150,18 +150,12 @@ class Menu:
     # Меню конкурсов (адм)
     @staticmethod
     def adm_contests_menu():
-        adm_contests_menu = types.InlineKeyboardMarkup(row_width=1)
-        adm_contests_button1 = types.InlineKeyboardButton(
-            text=ButtonText.ADM_CONTEST_INFO,
-            callback_data=ButtonCallback.ADM_CONTEST_INFO
+        menu = types.InlineKeyboardMarkup()
+        menu.add(
+            types.InlineKeyboardButton(ButtonText.ADM_CONTEST_INFO, callback_data=ButtonCallback.ADM_CONTEST_INFO),
+            types.InlineKeyboardButton(ButtonText.ADM_REVIEW_WORKS, callback_data=ButtonCallback.ADM_REVIEW_WORKS)
         )
-        adm_contests_button2 = types.InlineKeyboardButton(
-            text=ButtonText.ADM_CONTEST_RESET,
-            callback_data=ButtonCallback.ADM_CONTEST_RESET
+        menu.add(
+            types.InlineKeyboardButton(ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU)
         )
-        adm_contests_button3 = types.InlineKeyboardButton(
-            text=ButtonText.MAIN_MENU,
-            callback_data=ButtonCallback.MAIN_MENU
-        )
-        adm_contests_menu.add(adm_contests_button1, adm_contests_button2, adm_contests_button3)
-        return adm_contests_menu
+        return menu

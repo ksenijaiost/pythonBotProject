@@ -38,6 +38,9 @@ class ContestManager:
         # Инициализация счетчика
         c.execute("INSERT OR IGNORE INTO counters VALUES ('submission', 0)")
 
+        c.execute('CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_submissions_user ON submissions(user_id)')
+
         conn.commit()
         conn.close()
 
@@ -76,47 +79,25 @@ class ContestManager:
 class SubmissionManager:
     @staticmethod
     def create_submission(user_id, photos, caption):
-        if not photos:  # Запрещаем работы без фото
-            raise ValueError("Требуется хотя бы одно фото")
-            
+        
         conn = sqlite3.connect('database/contests.db')
-        c = conn.cursor()
-        
-        c.execute('''INSERT INTO submissions 
-                    (user_id, photos, caption, status, timestamp)
-                    VALUES (?, ?, ?, 'pending', ?)''',
-                (user_id, json.dumps(photos), caption, datetime.now()))
-        
-        conn.commit()
-        submission_id = c.lastrowid
-        conn.close()
-        return submission_id
-    
-    @staticmethod
-    def create_submission(user_id, photos, caption):
-        conn = sqlite3.connect('database/contests.db')
-        c = conn.cursor()
-        
-        # Получаем и увеличиваем счетчик
-        c.execute("UPDATE counters SET value = value + 1 WHERE name = 'submission'")
-        c.execute("SELECT value FROM counters WHERE name = 'submission'")
-        number = c.fetchone()[0]
-        
-        c.execute('''INSERT INTO submissions 
-                    (user_id, photos, caption, submission_number, timestamp)
-                    VALUES (?, ?, ?, ?, ?)''',
-                (user_id, json.dumps(photos), caption, number, datetime.now()))
-        
-        conn.commit()
-        submission_id = c.lastrowid
-        conn.close()
-        return submission_id
+        try:
+            c = conn.cursor()
+            c.execute('''INSERT INTO submissions 
+                        (user_id, photos, caption, status, timestamp)
+                        VALUES (?, ?, ?, 'pending', ?)''',
+                    (user_id, json.dumps(photos), caption, datetime.now()))
+            submission_id = c.lastrowid
+            conn.commit()
+            return submission_id
+        finally:
+            conn.close()
 
     @staticmethod
     def get_pending_submissions():
         conn = sqlite3.connect('database/contests.db')
         c = conn.cursor()
-        c.execute("SELECT * FROM submissions WHERE status = 'pending'")
+        c.execute("SELECT id, user_id FROM submissions WHERE status = 'pending'")
         result = c.fetchall()
         conn.close()
         return result
@@ -152,21 +133,21 @@ class SubmissionManager:
     @staticmethod
     def approve_submission(submission_id):
         conn = sqlite3.connect('database/contests.db')
-        c = conn.cursor()
-        
-        # Получаем и увеличиваем счетчик ТОЛЬКО для подтвержденных работ
-        c.execute("UPDATE counters SET value = value + 1 WHERE name = 'submission'")
-        c.execute("SELECT value FROM counters WHERE name = 'submission'")
-        number = c.fetchone()[0]
-        
-        c.execute('''UPDATE submissions 
-                    SET status = 'approved', submission_number = ?
-                    WHERE id = ?''',
-                (number, submission_id))
-        
-        conn.commit()
-        conn.close()
-        return number
+        try:
+            with conn:  # Автоматический commit/rollback
+                c = conn.cursor()
+                # Получаем и увеличиваем счетчик ТОЛЬКО для подтвержденных работ
+                c.execute("UPDATE counters SET value = value + 1 WHERE name = 'submission'")
+                c.execute("SELECT value FROM counters WHERE name = 'submission'")
+                number = c.fetchone()[0]
+                
+                c.execute('''UPDATE submissions 
+                            SET status = 'approved', submission_number = ?
+                            WHERE id = ?''',
+                        (number, submission_id))
+            return number
+        finally:
+            conn.close()
     
     @staticmethod
     def rollback_submission(submission_id):

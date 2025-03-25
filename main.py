@@ -1,3 +1,4 @@
+import logging
 from bot_instance import bot
 import handlers.admin
 import handlers.user
@@ -6,11 +7,16 @@ from handlers.envParams import admin_ids
 from menu.constants import ButtonCallback
 from menu.menu import Menu
 
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
 # После нажатия старт - проверка в списке админов, выдача меню админа или пользователя
 @bot.message_handler(commands=['start'])
 def start(message):
-    print(f"Received callback: {message}, chat_id: {message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {message}, chat_id: {message.chat.id}")
     if message.chat.id in admin_ids:
         main_menu = Menu.adm_menu()
         welcome_text = "Добро пожаловать, администратор! 👑"
@@ -29,7 +35,8 @@ def start(message):
 # Обработчик кнопки "В главное меню" - проверка в списке админов, выдача меню админа или пользователя
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.MAIN_MENU)
 def handle_back(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     if call.message.chat.id in admin_ids:
         main_menu = Menu.adm_menu()
     else:

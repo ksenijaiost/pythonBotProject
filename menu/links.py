@@ -8,15 +8,15 @@ load_dotenv()
 class Links:
     @staticmethod
     def get_chat_url():
-        raw_username = os.getenv("CHAT_ID")
+        raw_username = os.getenv("CHAT_USERNAME")
 
         if not raw_username:
-            raise ValueError("CHAT_ID отсутствует в .env!")
+            raise ValueError("CHAT_USERNAME отсутствует в .env!")
 
         username = raw_username.lstrip("@")
 
         if not username.isalnum() or len(username) < 5:
-            raise ValueError("Некорректный CHAT_ID! Пример: @my_chat")
+            raise ValueError("Некорректный CHAT_USERNAME! Пример: @my_chat")
 
         return f"https://t.me/{username}"
 

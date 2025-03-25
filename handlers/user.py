@@ -1,26 +1,70 @@
 from datetime import datetime
+import logging
 import threading
+from venv import logger
 from telebot import types
 import time
-from database.contest import ContestManager
+from database.contest import ContestManager, SubmissionManager
 from bot_instance import bot
-from handlers.envParams import ADMIN_USERNAME, CHAT_ID, CONTEST_CHAT_ID
+from handlers.envParams import ADMIN_USERNAME, CHAT_ID, CONTEST_CHAT_ID, CHAT_USERNAME
 from menu.links import Links
 from menu.menu import Menu
 from menu.constants import ButtonCallback, ButtonText, ConstantLinks
 
+
+from threading import Lock
+from weakref import WeakValueDictionary
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+class SubmissionStorage:
+    def __init__(self):
+        self.data = {}
+        self.lock = Lock()
+        self.timers = {}
+
+    def add(self, user_id, submission):
+        with self.lock:
+            self.data[user_id] = submission
+            self.timers[user_id] = time.time()
+
+    def get(self, user_id):
+        with self.lock:
+            return self.data.get(user_id)
+
+    def exists(self, user_id):
+        with self.lock:
+            return user_id in self.data
+
+    def remove(self, user_id):
+        with self.lock:
+            if user_id in self.data:
+                del self.data[user_id]
+                if user_id in self.timers:
+                    del self.timers[user_id]
+
+    def get_all_users(self):
+        with self.lock:
+            return list(self.data.keys())
+
+user_submissions = SubmissionStorage()
 
 def is_user_in_chat(user_id):
     try:
         chat_member = bot.get_chat_member(CHAT_ID, user_id)
         return chat_member.status not in ['left', 'kicked']
     except Exception as e:
-        print(f"Ошибка проверки участника чата: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"Ошибка проверки участника чата: {e}")
         return False
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
 def handle_user_guides(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "Меню гайдов. Выберите действие:",
         call.message.chat.id,
@@ -31,7 +75,8 @@ def handle_user_guides(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_FIND_GUIDE)
 def handle_user_find_guide(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "На данный момент поиск недоступен, но Вы можете посмотреть все гайды на нашем сайте",
         call.message.chat.id,
@@ -42,7 +87,8 @@ def handle_user_find_guide(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
 def handle_user_guides(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "Меню конкурсов. Выберите действие:",
         call.message.chat.id,
@@ -108,7 +154,8 @@ def handle_user_contest_info(call):
         )
         
     except Exception as e:
-        print(f"Ошибка при выводе информации о конкурсе: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"Ошибка при выводе информации о конкурсе: {e}")
         bot.answer_callback_query(
             call.id,
             "⚠️ Произошла ошибка при загрузке информации",
@@ -118,20 +165,37 @@ def handle_user_contest_info(call):
 
 SUBMISSION_TIMEOUT = 300  # 5 минут на подтверждение
 
-# Временное хранилище
-user_submissions = {}
+
 
 class ContestSubmission:
     def __init__(self):
-        self.photos = []
-        self.caption = ""
+        self.photos = [] # Список ID фотографий
+        self.caption = "" # Подпись к работе
+        self.media_group_id = None # ID медиагруппы (для альбомов)
+        self.submission_time = time.time() # Время начала отправки
+        self.status = "collecting_photos"  # collecting_photos → waiting_text → preview
         self.send_by_bot = None  # True/False
-        self.submission_time = time.time()
-        self.last_media_group = None
+        self.last_media_time = time.time()  # Время последнего фото в группе
+        self.group_check_timer = None  # Таймер проверки завершения группы
+
+    def cancel_timer(self):
+        if self.group_check_timer:
+            self.group_check_timer.cancel()
+
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST_SEND)
 def start_contest_submission(call):
     try:
+        user_id = call.from_user.id
+        # Проверка через метод exists
+        if user_submissions.exists(user_id): 
+            bot.answer_callback_query(
+                call.id, 
+                "⚠️ Вы уже начали отправку работы!",
+                show_alert=True
+            )
+            return
+
         # Проверяем, состоит ли пользователь в чате
         if not is_user_in_chat(call.from_user.id):
             bot.send_message(
@@ -142,69 +206,134 @@ def start_contest_submission(call):
             return
 
         user_id = call.from_user.id
-        user_submissions[user_id] = ContestSubmission()
+        user_submissions.add(user_id, ContestSubmission())
         
         bot.send_message(
             call.message.chat.id,
-            "📸 Пришлите работу (до 10 фото с текстом или без):",
+            "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже):",
             reply_markup=types.ForceReply()
         )
         
     except Exception as e:
-        print(f"Ошибка начала отправки: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"Ошибка начала отправки: {e}")
         handle_submission_error(call.from_user.id, e)
 
 # Обработчик отправки работ
-@bot.message_handler(content_types=['photo', 'text'], func=lambda m: m.from_user.id in user_submissions)
+# Обработчик для приёма фото
+@bot.message_handler(
+    content_types=['photo'], 
+    func=lambda m: user_submissions.exists(m.from_user.id) and 
+    user_submissions.get(m.from_user.id).status == "collecting_photos"
+)
 def handle_work_submission(message):
     user_id = message.from_user.id
-    submission = user_submissions[user_id]
+    submission = user_submissions.get(user_id)
     
     try:
-        # Обработка фото
-        if message.photo:
-            # Получаем самое большое фото из сообщения
+        # Обработка медиагруппы
+        if message.media_group_id:
+            submission.cancel_timer()
+
+            if submission.media_group_id != message.media_group_id:
+                submission.media_group_id = message.media_group_id
+                submission.photos = []
+
             largest_photo = max(message.photo, key=lambda p: p.file_size)
-            
-            # Проверка лимита
-            if len(submission.photos) >= 10:
-                bot.reply_to(message, "❌ Максимум 10 фото!")
-                return
-                
             submission.photos.append(largest_photo.file_id)
-        
-        # Сохраняем текст только из первого сообщения
-        if not submission.caption:
-            if message.caption:
-                submission.caption = message.caption
-            elif message.text and not message.photo:
-                submission.caption = message.text
-        
-        # Проверяем, является ли сообщение последним в медиагруппе
-        if not hasattr(submission, 'media_group_id') or message.media_group_id != submission.media_group_id:
-            submission.media_group_id = message.media_group_id
-            
-            # Проверяем наличие хотя бы одного фото
-            if not submission.photos:
-                raise ValueError("Требуется хотя бы одно фото")
-            
-            # Создаем клавиатуру
-            markup = types.InlineKeyboardMarkup()
-            markup.row(
-                types.InlineKeyboardButton("✅ Да", callback_data="send_by_bot_yes"),
-                types.InlineKeyboardButton("❌ Нет, отправлю сам(а)", callback_data="send_by_bot_no")
+            submission.last_media_time = time.time()
+
+            # Запускаем новый таймер
+            submission.group_check_timer = threading.Timer(
+                1.5,  # 1.5 секунды ожидания
+                handle_group_completion, 
+                args=[user_id]
             )
+            submission.group_check_timer.start()
+
+            return
+        
+        # Одиночное фото
+        else:
+            largest_photo = max(message.photo, key=lambda p: p.file_size)
+            submission.photos.append(largest_photo.file_id)
+
+        # Проверка лимита
+        if len(submission.photos) > 10:
+            bot.reply_to(message, "❌ Максимум 10 фото!")
+            user_submissions.remove(user_id)
+            return
+        
+        # Переходим к получению текста
+        submission.status = "waiting_text"
+        bot.send_message(
+            user_id,
+            "📝 Теперь отправьте текст для работы (описание, название и т.д.):",
+            reply_markup=types.ForceReply()
+        )
+    except Exception as e:
+        handle_submission_error(user_id, e)
+
+def handle_group_completion(user_id):
+    submission = user_submissions.get(user_id)
+    if not submission or submission.status != "collecting_photos":
+        return
+    
+    # Проверяем, что с момента последнего фото прошло достаточно времени
+    if (time.time() - submission.last_media_time) >= 1.5:
+        # Проверка лимита фото
+        if len(submission.photos) == 0:
+            bot.send_message(user_id, "❌ Вы не отправили ни одного фото!")
+            user_submissions.remove(user_id)
+            return
             
-            # Отправляем вопрос
-            bot.send_message(
-                message.chat.id,
-                "Отправить работу во время проведения конкурса за Вас?",
-                reply_markup=markup
-            )
+        if len(submission.photos) > 10:
+            bot.send_message(user_id, "❌ Максимум 10 фото!")
+            user_submissions.remove(user_id)
+            return
             
-    except ValueError as e:
-        bot.send_message(message.chat.id, f"❌ {str(e)}")
-        del user_submissions[user_id]
+        # Переход к запросу текста
+        submission.status = "waiting_text"
+        bot.send_message(
+            user_id,
+            "📝 Теперь отправьте текст для работы:",
+            reply_markup=types.ForceReply()
+        )
+
+@bot.message_handler(
+    content_types=['text'], 
+    func=lambda m: user_submissions.exists(m.from_user.id) and 
+    user_submissions.get(m.from_user.id).status == "waiting_text"
+)
+def handle_text(message):
+    user_id = message.from_user.id
+    submission = user_submissions.get(user_id)
+
+    try:
+        submission.caption = message.text
+        submission.status = "preview"
+
+        # Показываем предпросмотр
+        media = [types.InputMediaPhoto(pid) for pid in submission.photos]
+        media[0].caption = f"Предпросмотр:\n{submission.caption}"
+        bot.send_media_group(user_id, media)
+            
+        # Создаем клавиатуру
+        markup = types.InlineKeyboardMarkup()
+        markup.row(
+            types.InlineKeyboardButton("Да, отправить за меня", callback_data="send_by_bot_yes"),
+            types.InlineKeyboardButton("Нет, отправлю сам(а)", callback_data="send_by_bot_no")
+        )
+        markup.row(
+            types.InlineKeyboardButton("❌ Отменить отправку работы", callback_data="cancel_submission")
+        )   
+            
+        # Отправляем вопрос
+        bot.send_message(
+            message.chat.id,
+            "Отправить работу во время проведения конкурса за Вас?",
+            reply_markup=markup
+        )
     except Exception as e:
         handle_submission_error(user_id, e)
 
@@ -212,12 +341,25 @@ def handle_work_submission(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('send_by_bot_'))
 def handle_send_method(call):
     user_id = call.from_user.id
-    if user_id not in user_submissions:
+    if not user_submissions.exists(user_id):
+        bot.answer_callback_query(call.id, "❌ Сессия отправки истекла")
         return
     
     try:
-        submission = user_submissions[user_id]
+        submission = user_submissions.get(user_id)
+        # Сохраняем работу в БД со статусом "pending"
+        submission_id = SubmissionManager.create_submission(
+            user_id=user_id,
+            photos=submission.photos,
+            caption=submission.caption
+        )
+        # Обновляем статус в БД
+        SubmissionManager.update_submission(submission_id, status='pending')
+
         send_by_bot = call.data == 'send_by_bot_yes'
+
+        # Логирование перед отправкой
+        logger.info(f"Отправка работы для {user_id}: {len(submission.photos)} фото")
         
         # Проверяем доступность чата
         try:
@@ -225,106 +367,83 @@ def handle_send_method(call):
         except Exception as e:
             raise Exception(f"Чат {CONTEST_CHAT_ID} недоступен: {str(e)}")
         
-        # Отправляем работу
-        if submission.photos:
-            media = [types.InputMediaPhoto(pid) for pid in submission.photos]
-            media[0].caption = f"{submission.caption}\n\nОтправка ботом: {'✅ Да' if send_by_bot else '❌ Нет'}"
-            bot.send_media_group(CONTEST_CHAT_ID, media)
-        else:
-            bot.send_message(CONTEST_CHAT_ID, f"{submission.caption}\n\nОтправка ботом: {'✅ Да' if send_by_bot else '❌ Нет'}")
-        
+        # Формируем медиагруппу
+        media = [types.InputMediaPhoto(pid) for pid in submission.photos]
+        media[0].caption = f"{submission.caption}\n\nОтправка ботом: {'✅ Да' if send_by_bot else '❌ Нет'}"
+
+        # Отправляем в чат конкурса
+        try:
+            sent_messages = bot.send_media_group(
+                chat_id=CONTEST_CHAT_ID,
+                media=media
+            )
+            logger.info(f"Работа отправлена в чат {CONTEST_CHAT_ID}: {sent_messages}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки в чат: {str(e)}")
+            raise
+
         # Уведомление пользователю
         bot.send_message(
-            user_id,
-            "✅ Работа успешно принята! Мы свяжемся с вами по итогам конкурса.",
+            chat_id=user_id,
+            text="✅ Работа отправлена админам! После проверки я пришлю номер!",
             reply_markup=Menu.contests_menu()
         )
         
         # Очистка данных
-        del user_submissions[user_id]
+        user_submissions.remove(user_id)
         
     except Exception as e:
         handle_submission_error(user_id, e)
-        bot.answer_callback_query(call.id, "⚠️ Ошибка при отправке!")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка при отправке работы админам!")
+
+@bot.callback_query_handler(func=lambda call: call.data == "cancel_submission")
+def handle_cancel_submission(call):
+    user_id = call.from_user.id
+    try:
+        if user_submissions.exists(user_id):
+            user_submissions.remove(user_id)
+            bot.answer_callback_query(call.id, "❌ Отправка отменена")
+            
+            # Удаляем сообщения с предпросмотром
+            for _ in range(2):  # Удаляем предпросмотр и кнопки
+                try:
+                    bot.delete_message(call.message.chat.id, call.message.message_id - _)
+                except:
+                    pass
+                    
+    except Exception as e:
+        handle_submission_error(user_id, e)
+
 
 # Функция обработки ошибок
 def handle_submission_error(user_id, error):
-    error_msg = (
-        "⚠️ Произошла ошибка! Свяжитесь с @{ADMIN_USERNAME}\n"
-        f"Ошибка: {str(error)}"
-    )
-    bot.send_message(user_id, error_msg, reply_markup=Menu.contests_menu())
-    print(f"Ошибка отправки: {error}")
-    if user_id in user_submissions:
-        del user_submissions[user_id]
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('send_by_bot_'))
-def handle_send_method(call):
-    user_id = call.from_user.id
-    if user_id not in user_submissions:
-        return
-    
-    try:
-        submission = user_submissions[user_id]
-        submission.send_by_bot = call.data == 'send_by_bot_yes'
-        
-        # Отправляем работу в чат конкурса
-        caption = f"{submission.caption}\n\n"
-        caption += f"Автор: @{call.from_user.username}\n"
-        caption += f"Отправка админами: {'✅ Да' if submission.send_by_bot else '❌ Нет'}"
-        
-        if submission.photos:
-            if len(submission.photos) == 1:
-                bot.send_photo(
-                    CONTEST_CHAT_ID,
-                    submission.photos[0],
-                    caption=caption
-                )
-            else:
-                media = [types.InputMediaPhoto(pid) for pid in submission.photos]
-                media[0].caption = caption
-                bot.send_media_group(CONTEST_CHAT_ID, media)
-        else:
-            bot.send_message(CONTEST_CHAT_ID, caption)
-            
-        # Уведомление пользователю
-        bot.send_message(
-            user_id,
-            "✅ Работа принята на проверку! После проверки Вам пришлют номер.",
-            reply_markup=Menu.contests_menu()
-        )
-        
-        del user_submissions[user_id]
-        
-    except Exception as e:
-        handle_submission_error(user_id, e)
-
-def handle_submission_error(user_id, error):
-    print(f"Ошибка отправки: {error}")
-    if user_id in user_submissions:
-        del user_submissions[user_id]
-    
+    logger.error(f"[User {user_id}] Ошибка: {str(error)}", exc_info=True)
     bot.send_message(
         user_id,
         f"⚠️ Произошла ошибка! Свяжитесь с @{ADMIN_USERNAME}",
         reply_markup=Menu.contests_menu()
     )
 
-# Таймаут 10 минут
+
+# Таймаут
 def check_timeout():
     while True:
         try:
             current_time = time.time()
-            for user_id in list(user_submissions.keys()):
-                if current_time - user_submissions[user_id].submission_time > 600:
-                    del user_submissions[user_id]
-                    bot.send_message(
-                        user_id, 
-                        "⌛ Время на отправку истекло! Начните заново.",
-                        reply_markup=Menu.contests_menu()
-                    )
+            for user_id in user_submissions.get_all_users():
+                submission = user_submissions.get(user_id)
+                if current_time - submission.submission_time > 600:
+                    user_submissions.remove(user_id)
+                    try:
+                        bot.send_message(
+                            user_id, 
+                            "⌛ Время на отправку истекло! Начните заново.",
+                            reply_markup=Menu.contests_menu()
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки уведомления: {str(e)}")
             time.sleep(60)
         except Exception as e:
-            print(f"Ошибка таймера: {e}")
+            logger.error(f"Ошибка таймера: {str(e)}", exc_info=True)
 
 threading.Thread(target=check_timeout, daemon=True).start()

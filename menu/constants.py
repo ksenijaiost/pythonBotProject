@@ -27,7 +27,9 @@ class ButtonText:
     # Меню конкурсов
     ADM_CONTEST_INFO = "Обновить информацию"
     ADM_CONTEST_RESET = "Сбросить счётчик работ"
-
+    ADM_REVIEW_WORKS = "👁 Проверить работы"
+    ADM_APPROVE = "✅ Одобрить"
+    ADM_REJECT = "❌ Отклонить"
 
 class ButtonCallback:
     # Назад
@@ -52,6 +54,9 @@ class ButtonCallback:
     ADM_CONTEST = "adm_contest"
     ADM_CONTEST_INFO = "adm_contest_info"
     ADM_CONTEST_RESET = "adm_consest_reset"
+    ADM_REVIEW_WORKS = "adm_review_works"
+    ADM_APPROVE = "adm_approve_"
+    ADM_REJECT = "adm_reject_"
 
 
 class ConstantLinks:

@@ -6,10 +6,13 @@ from telebot import types
 from database.contest import ContestManager, SubmissionManager, get_submission
 from handlers.envParams import admin_ids
 from bot_instance import bot
-from menu.constants import ButtonCallback
+from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
 # storage.py
 from threading import Lock
@@ -53,7 +56,8 @@ ADMIN_STEPS = {
 # Меню конкурсов для админа
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST)
 def handle_adm_contest(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
         "Меню конкурсов (адм). Выберите действие:",
         call.message.chat.id,
@@ -108,7 +112,8 @@ def start_contest_update(call):
         )
 
     except Exception as e:
-        print(f"Ошибка при получении данных: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"Ошибка при получении данных: {e}")
         bot.answer_callback_query(call.id, "⚠️ Ошибка загрузки данных", show_alert=True)
 
 # Обработчик отмены
@@ -120,7 +125,8 @@ def handle_cancel_update(call):
 # Обработчик подтверждения обновления
 @bot.callback_query_handler(func=lambda call: call.data == "confirm_update")
 def start_contest_update(call):
-    print(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     if call.message.chat.id not in admin_ids:
         return
     storage.set_user_step(call.from_user.id, 'theme')
@@ -142,7 +148,10 @@ def handle_admin_input(message):
         try:
             datetime.strptime(message.text, "%d.%m.%Y")
         except ValueError:
-            bot.send_message(message.chat.id, "❌ Неверный формат даты!")
+            bot.send_message(
+                message.chat.id,
+                "❌ Неверный формат! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)"
+            )
             return
 
     # Сохраняем данные
@@ -168,24 +177,11 @@ def handle_admin_input(message):
         storage.clear(user_id)
         bot.send_message(message.chat.id, "✅ Данные обновлены!", reply_markup=Menu.back_adm_contest_menu())
 
-def process_approval(message, submission_id):
-    try:
-        # Только здесь генерируем номер
-        number = SubmissionManager.approve_submission(submission_id)
-        
-        submission = get_submission(submission_id)
-        user_id = submission['user_id']
-        
-        bot.send_message(
-            user_id,
-            f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
-            reply_markup=Menu.main_menu()
-        )
-        
-        bot.send_message(message.chat.id, f"Работа #{submission_id} одобрена как №{number}!")
-
-    except Exception as e:
-        handle_admin_error(message.chat.id, e)
+@bot.callback_query_handler(func=lambda call: call.data == "stats")
+def show_stats(call):
+    pending = SubmissionManager.get_pending_count()
+    approved = SubmissionManager.get_approved_count()
+    bot.send_message(..., f"📊 Статистика:\n⏳ Ожидают: {pending}\n✅ Одобрено: {approved}")
 
 def process_rejection(message, submission_id):
     try:
@@ -194,12 +190,12 @@ def process_rejection(message, submission_id):
         submission = get_submission(submission_id)
         user_id = submission['user_id']
         bot.send_message(
-            submission[1],
+            submission['user_id'],
             f"❌ Работа отклонена!\nПричина: {message.text}",
-            reply_markup=Menu.main_menu()
+            reply_markup=Menu.back_user_contest_menu()
         )
         
-        bot.send_message(message.chat.id, f"Работа #{submission_id} отклонена!")
+        bot.send_message(message.chat.id, f"Работа #{submission_id} отклонена!", reply_markup=Menu.adm_menu())
         
     except Exception as e:
         handle_admin_error(message.chat.id, e)
@@ -220,10 +216,12 @@ def handle_admin_error(chat_id, error):
             parse_mode="Markdown"
         )
     except Exception as e:
-        print(f"Не удалось отправить сообщение об ошибке: {e}")
+        logger = logging.getLogger(__name__)
+        logger.error(f"Не удалось отправить сообщение об ошибке: {e}")
     
     # Логирование в консоль
-    print(f"\n❌ ADMIN ERROR [{datetime.now()}]:")
+    logger = logging.getLogger(__name__)
+    logger.error(f"\n❌ ADMIN ERROR [{datetime.now()}]:")
     traceback.print_exc()
     
     # Логирование в файл (опционально)
@@ -251,3 +249,114 @@ def handle_adm_contest_reset(call):
 def confirm_reset(call):
     SubmissionManager.reset_counter()
     bot.send_message(call.message.chat.id, "✅ Счетчик участников сброшен!", reply_markup=Menu.adm_contests_menu())
+
+@bot.callback_query_handler(func=lambda call: call.data == "cancel_reset")
+def handle_cancel_reset(call):
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    bot.send_message(call.message.chat.id, "❌ Сброс счетчика отменен")
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_REVIEW_WORKS)
+def show_pending_submissions(call):
+    try:
+        submissions = SubmissionManager.get_pending_submissions()
+        
+        if not submissions:
+            bot.answer_callback_query(call.id, "Нет работ на проверке")
+            return
+
+        markup = types.InlineKeyboardMarkup()
+        for sub in submissions:
+            btn_text = f"Работа #{sub[0]} от пользователя {sub[1]}"
+            markup.add(
+                types.InlineKeyboardButton(
+                    btn_text,
+                    callback_data=f"submission_{sub[0]}"
+                )
+            )
+        
+        bot.edit_message_text(
+            "Выберите работу для модерации:",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup
+        )
+
+    except Exception as e:
+        handle_admin_error(call.message.chat.id, e)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('submission_'))
+def show_submission_details(call):
+    try:
+        submission_id = int(call.data.split('_')[1])
+        submission = get_submission(submission_id)
+        
+        media_group = []
+        for i, photo in enumerate(submission['photos']):
+            media = types.InputMediaPhoto(
+                photo,
+                caption=f"Работа #{submission_id}\n\n{submission['caption']}" if i == 0 else ""
+            )
+            media_group.append(media)
+        
+        bot.send_media_group(call.message.chat.id, media_group)
+        
+        markup = types.InlineKeyboardMarkup()
+        markup.row(
+            types.InlineKeyboardButton(
+                ButtonText.ADM_APPROVE,
+                callback_data=f"{ButtonCallback.ADM_APPROVE}{submission_id}"
+            ),
+            types.InlineKeyboardButton(
+                ButtonText.ADM_REJECT,
+                callback_data=f"{ButtonCallback.ADM_REJECT}{submission_id}"
+            )
+        )
+        
+        bot.send_message(
+            call.message.chat.id,
+            f"Действия для работы #{submission_id}:",
+            reply_markup=markup
+        )
+
+    except Exception as e:
+        handle_admin_error(call.message.chat.id, e)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(ButtonCallback.ADM_APPROVE))
+def approve_work(call):
+    try:
+        submission_id = int(call.data.replace(ButtonCallback.ADM_APPROVE, ""))
+        number = SubmissionManager.approve_submission(submission_id)
+        
+        submission = get_submission(submission_id)
+        bot.send_message(
+            submission['user_id'],
+            f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
+            reply_markup=Menu.back_user_contest_menu()
+        )
+        
+        bot.edit_message_text(
+            f"Работа #{submission_id} одобрена как №{number}!",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=Menu.adm_menu()
+        )
+
+    except Exception as e:
+        handle_admin_error(call.message.chat.id, e)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(ButtonCallback.ADM_REJECT))
+def reject_work(call):
+    try:
+        submission_id = int(call.data.replace(ButtonCallback.ADM_REJECT, ""))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Введите причину отклонения:",
+            reply_markup=types.ForceReply()
+        )
+        bot.register_for_reply(
+            msg, 
+            lambda m: process_rejection(m, submission_id)
+        )
+
+    except Exception as e:
+        handle_admin_error(call.message.chat.id, e)
