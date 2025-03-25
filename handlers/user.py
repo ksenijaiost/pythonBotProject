@@ -4,7 +4,12 @@ import threading
 from venv import logger
 from telebot import types
 import time
-from database.contest import ContestManager, SubmissionManager, is_user_approved, user_submissions
+from database.contest import (
+    ContestManager,
+    SubmissionManager,
+    is_user_approved,
+    user_submissions,
+)
 from bot_instance import bot
 from handlers.envParams import ADMIN_USERNAME, CHAT_ID, CONTEST_CHAT_ID, CHAT_USERNAME
 from menu.links import Links
@@ -440,3 +445,19 @@ def check_timeout():
 
 
 threading.Thread(target=check_timeout, daemon=True).start()
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TURNIP)
+def handle_user_turnip(call):
+    markup = types.InlineKeyboardMarkup()
+    markup.row(
+        types.InlineKeyboardButton(
+            text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+        ),
+    )
+    bot.edit_message_text(
+        f"На данный момент работа с репой отключена, но скоро мы её возобновим!",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=markup,
+    )
