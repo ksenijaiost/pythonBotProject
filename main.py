@@ -8,12 +8,12 @@ from menu.constants import ButtonCallback
 from menu.menu import Menu
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
+
 # После нажатия старт - проверка в списке админов, выдача меню админа или пользователя
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=["start"])
 def start(message):
     logger = logging.getLogger(__name__)
     logger.info(f"Received callback: {message}, chat_id: {message.chat.id}")
@@ -28,7 +28,7 @@ def start(message):
         message.chat.id,
         f"✨ {welcome_text}\nВыберите действие:",
         parse_mode="Markdown",
-        reply_markup=main_menu
+        reply_markup=main_menu,
     )
 
 
@@ -45,9 +45,9 @@ def handle_back(call):
         "Главное меню. Выберите действие::",
         call.message.chat.id,
         call.message.message_id,
-        reply_markup=main_menu
+        reply_markup=main_menu,
     )
 
 
-if __name__ == '__main__':
-    bot.infinity_polling(allowed_updates=['message', 'callback_query'])
+if __name__ == "__main__":
+    bot.infinity_polling(allowed_updates=["message", "callback_query"])

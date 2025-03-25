@@ -24,6 +24,8 @@ class ButtonText:
     # Администраторские
     # Главное меню
     ADM_CONTEST = "Конкурс"
+    ADM_TURNIP = "Репка"
+    ADM_ADD_GUIDE = "Добавить гайд"
     # Меню конкурсов
     ADM_CONTEST_INFO = "Обновить информацию"
     ADM_CONTEST_RESET = "Сбросить счётчик работ"
@@ -52,6 +54,9 @@ class ButtonCallback:
     # Администраторские
     # Главное меню
     ADM_CONTEST = "adm_contest"
+    ADM_TURNIP = "adm_turnip"
+    ADM_ADD_GUIDE = "adm_add_guide"
+    # Меню конкурсов
     ADM_CONTEST_INFO = "adm_contest_info"
     ADM_CONTEST_RESET = "adm_consest_reset"
     ADM_REVIEW_WORKS = "adm_review_works"
