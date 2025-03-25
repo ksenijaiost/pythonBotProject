@@ -72,3 +72,8 @@ class ConstantLinks:
     SITE = "https://acnh.tilda.ws"
     # Конкурсы
     CONTEST_LINK = "https://acnh.tilda.ws/contest#rules"
+
+
+class UserState:
+    WAITING_ADMIN_CONTENT = "waiting_admin_content"
+    WAITING_NEWS_CONTENT = "waiting_news_content"

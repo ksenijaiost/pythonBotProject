@@ -9,12 +9,20 @@ from database.contest import (
     SubmissionManager,
     is_user_approved,
     user_submissions,
+    user_content_storage,
 )
 from bot_instance import bot
-from handlers.envParams import ADMIN_USERNAME, CHAT_ID, CONTEST_CHAT_ID, CHAT_USERNAME
+from handlers.envParams import (
+    ADMIN_CHAT_ID,
+    NEWSPAPER_CHAT_ID,
+    ADMIN_USERNAME,
+    CHAT_ID,
+    CONTEST_CHAT_ID,
+    CHAT_USERNAME,
+)
 from menu.links import Links
 from menu.menu import Menu
-from menu.constants import ButtonCallback, ButtonText, ConstantLinks
+from menu.constants import ButtonCallback, ButtonText, ConstantLinks, UserState
 
 
 from threading import Lock
@@ -461,3 +469,133 @@ def handle_user_turnip(call):
         call.message.message_id,
         reply_markup=markup,
     )
+
+
+def handle_target_selection(call, target_chat):
+    user_id = call.from_user.id
+    user_content_storage.init_content(user_id, target_chat)
+
+    bot.set_state(
+        user_id,
+        (
+            UserState.WAITING_ADMIN_CONTENT
+            if target_chat == ADMIN_CHAT_ID
+            else UserState.WAITING_NEWS_CONTENT
+        ),
+    )
+
+    bot.send_message(
+        call.message.chat.id,
+        "📤 Что вы хотите отправить? Можно присылать:\n"
+        "- Текст\n- До 10 фото с текстом/без\n"
+        "⚠️ Отправляйте все фото ОДНИМ сообщением!\n"
+        "❌ Для отмены используйте /cancel",
+        reply_markup=types.ForceReply(),
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
+def handle_user_to_admin(call):
+    handle_target_selection(call, ADMIN_CHAT_ID)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_NEWS)
+def handle_user_to_news(call):
+    handle_target_selection(call, NEWSPAPER_CHAT_ID)
+
+
+@bot.message_handler(
+    content_types=["text", "photo"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    in [UserState.WAITING_ADMIN_CONTENT, UserState.WAITING_NEWS_CONTENT],
+)
+def handle_user_content(message):
+    user_id = message.from_user.id
+    content_data = user_content_storage.get_data(user_id)
+
+    try:
+        if message.content_type == "photo":
+            if len(content_data["photos"]) >= 10:
+                bot.reply_to(message, "❌ Можно отправить не более 10 фото!")
+                return
+
+            photo_id = message.photo[-1].file_id
+            user_content_storage.add_photo(user_id, photo_id)
+
+            if message.caption:
+                user_content_storage.set_text(user_id, message.caption)
+
+        elif message.content_type == "text":
+            user_content_storage.set_text(user_id, message.text)
+
+        # Проверяем завершенность
+        if message.content_type == "text" or len(content_data["photos"]) > 0:
+            send_to_target_chat(user_id, content_data)
+            user_content_storage.clear(user_id)
+            bot.delete_state(user_id)
+
+    except Exception as e:
+        logger.error(f"Content sending error: {e}")
+        bot.reply_to(message, "❌ Ошибка обработки контента")
+
+
+def send_to_target_chat(user_id, content_data):
+    try:
+        target_chat = content_data['target_chat']
+        text = content_data['text']
+        photos = content_data['photos']
+
+        user = bot.get_chat(user_id)
+        user_info = f"\n\n👤 Отправитель: " 
+        if user.username:
+            user_info += f"@{user.username}"
+            if user.first_name:
+                user_info += f" ({user.first_name}"
+                if user.last_name:
+                    user_info += f" {user.last_name}"
+                user_info += ")"
+        else:
+            user_info += f"[id:{user_id}]"
+            if user.first_name:
+                user_info += f" {user.first_name}"
+                if user.last_name:
+                    user_info += f" {user.last_name}"
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💬 Ответить", callback_data=f"reply_to_{user_id}"))
+
+        if photos:
+            media = [types.InputMediaPhoto(photo, caption=f"{text or ''}{user_info}" if i == 0 else None) 
+                    for i, photo in enumerate(photos)]
+            
+            # Отправляем медиагруппу БЕЗ reply_markup
+            sent_messages = bot.send_media_group(target_chat, media)
+            
+            # Добавляем кнопку к последнему сообщению в группе
+            bot.edit_message_reply_markup(
+                chat_id=target_chat,
+                message_id=sent_messages[-1].message_id,
+                reply_markup=markup
+            )
+
+        elif text:
+            full_text = f"{text}{user_info}"
+            bot.send_message(target_chat, full_text, reply_markup=markup)
+
+        bot.send_message(user_id, "✅ Контент успешно отправлен!", reply_markup=Menu.back_user_only_main_menu())
+
+    except Exception as e:
+        logger.error(f"Forward error: {e}")
+        bot.send_message(user_id, "❌ Ошибка при отправке контента", reply_markup=Menu.back_user_only_main_menu())
+
+
+@bot.message_handler(
+    commands=["cancel"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    in [UserState.WAITING_ADMIN_CONTENT, UserState.WAITING_NEWS_CONTENT],
+)
+def handle_cancel(message):
+    user_id = message.from_user.id
+    user_content_storage.clear(user_id)
+    bot.delete_state(user_id)
+    bot.send_message(message.chat.id, "🚫 Отправка отменена")

@@ -6,6 +6,18 @@ from menu.links import Links
 
 class Menu:
     @staticmethod
+    def back_user_only_main_menu():
+        """Пользовательское меню - назад в главное"""
+        back_menu = types.InlineKeyboardMarkup(row_width=1)
+        back_menu.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            ),
+        )
+
+        return back_menu
+    
+    @staticmethod
     def back_user_contest_menu():
         """Пользовательское меню - назад к конкурсам"""
         back_menu = types.InlineKeyboardMarkup(row_width=1)

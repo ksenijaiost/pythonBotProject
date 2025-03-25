@@ -143,19 +143,21 @@ class SubmissionManager:
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
-            
+
             # Обнуляем счетчик
             c.execute("UPDATE counters SET value = 0 WHERE name = 'submission'")
-            
+
             # Очищаем все заявки
             c.execute("DELETE FROM submissions")
-            
+
             # Очищаем подтвержденные работы
             c.execute("DELETE FROM approved_submissions")
-            
+
             # Сбрасываем автоинкремент для чистого старта
-            c.execute("DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions')")
-            
+            c.execute(
+                "DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions')"
+            )
+
             conn.commit()
         finally:
             conn.close()
@@ -328,3 +330,39 @@ def is_user_approved(user_id):  # Убрать self
     count = cursor.fetchone()[0]
     conn.close()
     return count > 0
+
+
+class UserContentStorage:
+    def __init__(self):
+        self.data = {}
+        self.lock = Lock()
+
+    def init_content(self, user_id, target_chat):
+        with self.lock:
+            self.data[user_id] = {
+                "target_chat": target_chat,
+                "photos": [],
+                "text": None,
+            }
+
+    def add_photo(self, user_id, photo_id):
+        with self.lock:
+            if user_id in self.data:
+                self.data[user_id]["photos"].append(photo_id)
+
+    def set_text(self, user_id, text):
+        with self.lock:
+            if user_id in self.data:
+                self.data[user_id]["text"] = text
+
+    def get_data(self, user_id):
+        with self.lock:
+            return self.data.get(user_id)
+
+    def clear(self, user_id):
+        with self.lock:
+            if user_id in self.data:
+                del self.data[user_id]
+
+
+user_content_storage = UserContentStorage()
