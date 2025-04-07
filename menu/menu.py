@@ -16,7 +16,7 @@ class Menu:
         )
 
         return back_menu
-    
+
     @staticmethod
     def back_user_contest_menu():
         """Пользовательское меню - назад к конкурсам"""
@@ -144,6 +144,33 @@ class Menu:
 
         return contests_menu
 
+    @staticmethod
+    def news_menu():
+        """Пользовательское меню отправки новостей"""
+        news_menu = types.InlineKeyboardMarkup(row_width=1)
+        news_menu.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_NEWS,
+                callback_data=ButtonCallback.USER_NEWS_NEWS,
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_CODE,
+                callback_data=ButtonCallback.USER_NEWS_CODE,
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_POCKET,
+                callback_data=ButtonCallback.USER_NEWS_POCKET,
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_DESIGN,
+                callback_data=ButtonCallback.USER_NEWS_DESIGN,
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            ),
+        )
+        return news_menu
+
     # Административное меню
     # Главное меню
     @staticmethod
@@ -191,13 +218,14 @@ class Menu:
         )
 
         return menu
-    
+
     @staticmethod
     def adm_stat_menu():
         menu = types.InlineKeyboardMarkup()
         menu.add(
             types.InlineKeyboardButton(
-                text=ButtonText.ADM_CONTEST_RESET, callback_data=ButtonCallback.ADM_CONTEST_RESET
+                text=ButtonText.ADM_CONTEST_RESET,
+                callback_data=ButtonCallback.ADM_CONTEST_RESET,
             ),
         )
         menu.add(

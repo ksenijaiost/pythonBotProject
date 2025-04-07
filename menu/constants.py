@@ -20,6 +20,11 @@ class ButtonText:
     USER_CONTEST_INFO = "ℹ️ Узнать про конкурс"
     USER_CONTEST_SEND = "🎨 Отправить работу"
     USER_CONTEST_JUDGE = "⚖️ Записаться на судейство"
+    # Меню новостей
+    USER_NEWS_NEWS = "📰 Отправить новость в газету"
+    USER_NEWS_CODE = "🔢 Отправить код сна или курортного-бюро"
+    USER_NEWS_POCKET = "👋 Отправить код дружбы в PocketCamp"
+    USER_NEWS_DESIGN = "🎨 Отправить код кастомного дизайна"
 
     # Администраторские
     # Главное меню
@@ -53,6 +58,11 @@ class ButtonCallback:
     USER_CONTEST_INFO = "user_contest_info"
     USER_CONTEST_SEND = "user_contest_send"
     USER_CONTEST_JUDGE = "user_contest_judge"
+    # Меню новостей
+    USER_NEWS_NEWS = "user_news_news"
+    USER_NEWS_CODE = "user_news_code"
+    USER_NEWS_POCKET = "user_news_pocket"
+    USER_NEWS_DESIGN = "user_news_design"
     # Администраторские
     # Главное меню
     ADM_CONTEST = "adm_contest"
