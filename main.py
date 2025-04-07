@@ -1,8 +1,10 @@
 import logging
+from telebot import types
 from bot_instance import bot
 import handlers.admin
 import handlers.user
 import database.contest
+from database.contest import user_content_storage
 from handlers.envParams import admin_ids
 from menu.constants import ButtonCallback
 from menu.menu import Menu
@@ -15,22 +17,39 @@ logging.basicConfig(
 # После нажатия старт - проверка в списке админов, выдача меню админа или пользователя
 @bot.message_handler(commands=["start"])
 def start(message):
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Received callback: {message}, chat_id: {message.chat.id}")
-    if message.chat.id in admin_ids:
-        main_menu = Menu.adm_menu()
-        welcome_text = "Добро пожаловать, администратор! 👑"
-    else:
-        main_menu = Menu.user_menu()
-        welcome_text = "Добро пожаловать! 😊"
+    try:
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Start command from user: {message.from_user.id}")
+        
+        # Принудительный сброс состояний
+        user_id = message.from_user.id
+        bot.delete_state(user_id)
+        user_content_storage.clear(user_id)
 
-    bot.send_message(
-        message.chat.id,
-        f"✨ {welcome_text}\nВыберите действие:",
-        parse_mode="Markdown",
-        reply_markup=main_menu,
-    )
+        # Проверка администратора
+        if message.from_user.id in admin_ids:
+            logger.debug("Admin detected")
+            main_menu = Menu.adm_menu()
+            welcome_text = "Добро пожаловать, администратор! 👑"
+        else:
+            logger.debug("Regular user detected")
+            main_menu = Menu.user_menu()
+            welcome_text = "Добро пожаловать! 😊"
 
+        bot.send_message(
+            message.chat.id,
+            f"✨ {welcome_text}\nВыберите действие:",
+            parse_mode="Markdown",
+            reply_markup=main_menu,
+        )
+
+    except Exception as e:
+        logger.error(f"Start command error: {str(e)}")
+        bot.send_message(
+            message.chat.id,
+            "⚠️ Произошла ошибка. Попробуйте еще раз.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
 
 # Обработчик кнопки "В главное меню" - проверка в списке админов, выдача меню админа или пользователя
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.MAIN_MENU)
