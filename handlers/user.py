@@ -43,6 +43,9 @@ def is_user_in_chat(user_id):
         return False
 
 
+# ГАЙДЫ
+
+
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
 def handle_user_guides(call):
     logger = logging.getLogger(__name__)
@@ -67,6 +70,9 @@ def handle_user_find_guide(call):
         call.message.message_id,
         reply_markup=Menu.guides_menu(),
     )
+
+
+# КОНКУРСЫ
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
@@ -454,6 +460,8 @@ def check_timeout():
 
 threading.Thread(target=check_timeout, daemon=True).start()
 
+# РЕПКА
+
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TURNIP)
 def handle_user_turnip(call):
@@ -471,6 +479,9 @@ def handle_user_turnip(call):
     )
 
 
+# СООБЩЕНИЕ АДМИНАМ
+
+
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
 def handle_user_to_admin(call):
     user_id = call.from_user.id
@@ -478,7 +489,7 @@ def handle_user_to_admin(call):
 
     bot.set_state(
         user_id,
-        ADMIN_CHAT_ID,
+        UserState.WAITING_ADMIN_CONTENT,
     )
 
     bot.send_message(
@@ -488,28 +499,6 @@ def handle_user_to_admin(call):
         "⚠️ Отправляйте все фото ОДНИМ сообщением!\n"
         "❌ Для отмены используйте /cancel",
         reply_markup=types.ForceReply(),
-    )
-
-
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_NEWS)
-def handle_user_to_news(call):
-    # Проверяем, состоит ли пользователь в чате
-    if not is_user_in_chat(call.from_user.id):
-        bot.send_message(
-            call.message.chat.id,
-            "❌ Для отправки новостей необходимо состоять в нашем чате!\n"
-            + Links.get_chat_url(),
-            reply_markup=Menu.contests_menu(),
-        )
-        return
-    user_id = call.from_user.id
-    user_content_storage.init_content(user_id, NEWSPAPER_CHAT_ID)
-
-    bot.edit_message_text(
-        text="Что вы хотите прислать в новостную колонку?",
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        reply_markup=Menu.news_menu(),
     )
 
 
@@ -550,6 +539,7 @@ def handle_user_content(message):
 
 def send_to_target_chat(user_id, content_data):
     try:
+        logger.debug("send_to_target_chat - ", content_data)
         target_chat = content_data["target_chat"]
         text = content_data["text"]
         photos = content_data["photos"]
@@ -617,10 +607,53 @@ def send_to_target_chat(user_id, content_data):
 @bot.message_handler(
     commands=["cancel"],
     func=lambda message: bot.get_state(message.from_user.id)
-    in [UserState.WAITING_ADMIN_CONTENT, UserState.WAITING_NEWS_CONTENT],
+    in [
+        UserState.WAITING_ADMIN_CONTENT,
+        UserState.WAITING_NEWS_SCREENSHOTS,
+        UserState.WAITING_NEWS_DESCRIPTION,
+        UserState.WAITING_NEWS_SPEAKER,
+        UserState.WAITING_NEWS_ISLAND,
+        UserState.WAITING_CODE_VALUE,
+        UserState.WAITING_CODE_SCREENSHOTS,
+        UserState.WAITING_CODE_SPEAKER,
+        UserState.WAITING_CODE_ISLAND,
+        UserState.WAITING_POCKET_SCREENS,
+        UserState.WAITING_DESIGN_CODE,
+        UserState.WAITING_DESIGN_DESIGN_SCREEN,
+        UserState.WAITING_DESIGN_GAME_SCREENS,
+    ],
 )
 def handle_cancel(message):
     user_id = message.from_user.id
     user_content_storage.clear(user_id)
     bot.delete_state(user_id)
-    bot.send_message(message.chat.id, "🚫 Отправка отменена")
+    bot.send_message(
+        message.chat.id,
+        "🚫 Отправка отменена",
+        reply_markup=Menu.back_user_only_main_menu(),
+    )
+
+
+# ОТПРАВКА НОВОСТЕЙ
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_NEWS)
+def handle_user_to_news(call):
+    # Проверяем, состоит ли пользователь в чате
+    if not is_user_in_chat(call.from_user.id):
+        bot.send_message(
+            call.message.chat.id,
+            "❌ Для отправки новостей необходимо состоять в нашем чате!\n"
+            + Links.get_chat_url(),
+            reply_markup=Menu.back_user_only_main_menu(),
+        )
+        return
+    user_id = call.from_user.id
+    user_content_storage.init_content(user_id, NEWSPAPER_CHAT_ID)
+
+    bot.edit_message_text(
+        text="Что вы хотите прислать в новостную колонку?",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=Menu.news_menu(),
+    )

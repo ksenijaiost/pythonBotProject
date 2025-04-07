@@ -86,4 +86,19 @@ class ConstantLinks:
 
 class UserState:
     WAITING_ADMIN_CONTENT = "waiting_admin_content"
-    WAITING_NEWS_CONTENT = "waiting_news_content"
+    
+    WAITING_NEWS_SCREENSHOTS = 'waiting_news_screens'
+    WAITING_NEWS_DESCRIPTION = 'waiting_news_desc'
+    WAITING_NEWS_SPEAKER = 'waiting_news_speaker'
+    WAITING_NEWS_ISLAND = 'waiting_news_island'
+    
+    WAITING_CODE_VALUE = 'waiting_code_value'
+    WAITING_CODE_SCREENSHOTS = 'waiting_code_screens'
+    WAITING_CODE_SPEAKER = 'waiting_code_speaker'
+    WAITING_CODE_ISLAND = 'waiting_code_island'
+    
+    WAITING_POCKET_SCREENS = 'waiting_pocket_screens'
+
+    WAITING_DESIGN_CODE = 'waiting_design_code'
+    WAITING_DESIGN_DESIGN_SCREEN = 'waiting_design_design_screen'
+    WAITING_DESIGN_GAME_SCREENS = 'waiting_design_game_screens'
