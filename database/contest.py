@@ -358,6 +358,38 @@ class UserContentStorage:
     def get_data(self, user_id):
         with self.lock:
             return self.data.get(user_id)
+        
+    def init_news(self, user_id):
+        self.data[user_id] = {
+            'type': 'news',
+            'photos': [],
+            'description': None,
+            'speaker': None,
+            'island': None
+        }
+
+    def init_code(self, user_id):
+        self.data[user_id] = {
+            'type': 'code',
+            'code': None,
+            'photos': [],
+            'speaker': None,
+            'island': None
+        }
+
+    def init_pocket(self, user_id):
+        self.data[user_id] = {
+            'type': 'pocket',
+            'photos': []
+        }
+
+    def init_design(self, user_id):
+        self.data[user_id] = {
+            'type': 'design',
+            'code': None,
+            'design_screen': None,
+            'game_screens': []
+        }
 
     def clear(self, user_id):
         with self.lock:

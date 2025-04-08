@@ -1,6 +1,8 @@
 from datetime import datetime
 import logging
 import threading
+import re
+from telebot.apihelper import ApiTelegramException
 from venv import logger
 from telebot import types
 import time
@@ -29,7 +31,7 @@ from threading import Lock
 from weakref import WeakValueDictionary
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
 
 
@@ -528,7 +530,7 @@ def handle_user_content(message):
 
         # Проверяем завершенность
         if message.content_type == "text" or len(content_data["photos"]) > 0:
-            send_to_target_chat(user_id, content_data)
+            send_to_admin_chat(user_id, content_data)
             user_content_storage.clear(user_id)
             bot.delete_state(user_id)
 
@@ -537,9 +539,9 @@ def handle_user_content(message):
         bot.reply_to(message, "❌ Ошибка обработки контента")
 
 
-def send_to_target_chat(user_id, content_data):
+def send_to_admin_chat(user_id, content_data):
     try:
-        logger.debug("send_to_target_chat - ", content_data)
+        logger.debug("send_to_admin_chat - ", content_data)
         target_chat = content_data["target_chat"]
         text = content_data["text"]
         photos = content_data["photos"]
@@ -657,3 +659,481 @@ def handle_user_to_news(call):
         message_id=call.message.message_id,
         reply_markup=Menu.news_menu(),
     )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.USER_NEWS_NEWS
+)
+def handle_user_news_news(call):
+    user_id = call.from_user.id
+    user_content_storage.init_news(user_id)
+    bot.set_state(user_id, UserState.WAITING_NEWS_SCREENSHOTS)
+    # Сначала редактируем сообщение БЕЗ ForceReply
+    bot.edit_message_text(
+        text="📸 Пришлите до 10 скриншотов (отправьте все одним сообщением).",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+    )
+
+    # Затем отправляем новое сообщение с ForceReply
+    bot.send_message(
+        call.message.chat.id,
+        "⬇️ Отправьте скриншоты в этом чате:",
+        parse_mode="Markdown",
+        reply_markup=types.ForceReply(selective=True),
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE
+)
+def handle_news_code(call):
+    user_id = call.from_user.id
+    user_content_storage.init_code(user_id)
+    bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
+    bot.edit_message_text(
+        text="🔢 Пришлите код\nФормат (важен): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 цифры)",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+    )
+    bot.send_message(
+        call.message.chat.id,
+        "⬇️ Отправьте код в этом чате:",
+        parse_mode="Markdown",
+        reply_markup=types.ForceReply(selective=True),
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.USER_NEWS_POCKET
+)
+def handle_news_pocket(call):
+    user_id = call.from_user.id
+    user_content_storage.init_pocket(user_id)
+    bot.set_state(user_id, UserState.WAITING_POCKET_SCREENS)
+    bot.edit_message_text(
+        text='📸 Пришлите 2 скриншота карточки дружбы (лицевая и обратная сторона, лучше через кнопку "SAVE")',
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+    )
+    bot.send_message(
+        call.message.chat.id,
+        "⬇️ Отправьте скриншоты в этом чате:",
+        parse_mode="Markdown",
+        reply_markup=types.ForceReply(selective=True),
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.USER_NEWS_DESIGN
+)
+def handle_news_design(call):
+    user_id = call.from_user.id
+    user_content_storage.init_design(user_id)
+    bot.set_state(user_id, UserState.WAITING_DESIGN_CODE)
+    bot.edit_message_text(
+        text="🎨 Введите код дизайна в формате:\n`MA-0000-0000-0000`",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+    )
+    bot.send_message(
+        call.message.chat.id,
+        "⬇️ Отправьте код в этом чате:",
+        parse_mode="Markdown",
+        reply_markup=types.ForceReply(selective=True),
+    )
+
+
+def validate_code(pattern, code):
+    return re.match(pattern, code.strip(), re.IGNORECASE) is not None
+
+
+def parse_speaker_info(text):
+    parts = [p.strip() for p in text.split(",", 1)]
+    return parts[0], parts[1] if len(parts) > 1 else None
+
+
+# Обработчики для USER_NEWS_NEWS
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SCREENSHOTS,
+)
+def handle_news_screenshots(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    try:
+        # Собираем уникальные фото по file_unique_id (берем самое высокое качество)
+        unique_photos = {}
+        for photo in reversed(message.photo):
+            unique_photos[photo.file_unique_id] = photo.file_id
+
+        new_files = list(unique_photos.values())
+
+        # Проверка лимита
+        if len(data["photos"]) + len(new_files) > 10:
+            raise ValueError("❌ Можно отправить не более 10 фото")
+
+        # Сохраняем только уникальные file_id
+        data["photos"].extend(new_files)
+        logger.debug(f"Добавлено {len(new_files)} уникальных фото")
+
+        # Запрашиваем описание только при первом добавлении фото
+        if not data.get("description_requested"):
+            bot.set_state(user_id, UserState.WAITING_NEWS_DESCRIPTION)
+            data["description_requested"] = True
+            bot.send_message(
+                message.chat.id, "📝 Напишите описание новости (или /skip):"
+            )
+
+    except ValueError as e:
+        bot.reply_to(message, f"❌ {str(e)}!")
+    except Exception as e:
+        logger.error(f"Ошибка обработки фото: {str(e)}")
+        bot.reply_to(message, "⚠️ Произошла ошибка обработки фото")
+
+
+@bot.message_handler(
+    commands=["skip"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_DESCRIPTION,
+)
+def skip_news_description(message):
+    user_id = message.from_user.id
+    bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
+    bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+
+
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_DESCRIPTION,
+)
+def handle_news_description(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+    data["description"] = message.text
+    bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
+    bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+
+
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SPEAKER,
+)
+def handle_news_speaker(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+    data["speaker"] = message.text
+    bot.set_state(user_id, UserState.WAITING_NEWS_ISLAND)
+    bot.send_message(message.chat.id, "🏝️ Введите название острова:")
+
+
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_ISLAND,
+)
+def handle_news_island(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+    data["island"] = message.text
+    send_to_news_chat(user_id, data)
+
+
+# Обработчики для USER_NEWS_CODE
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_VALUE,
+)
+def handle_code_value(message):
+    user_id = message.from_user.id
+    code = message.text.upper()
+
+    if not validate_code(r"^[DR]A-\d{4}-\d{4}-\d{4}$", code):
+        bot.reply_to(message, "❌ Неверный формат кода! Пример: DA-1234-5678-9012")
+        return
+
+    user_content_storage.get_data(user_id)["code"] = code
+    bot.set_state(user_id, UserState.WAITING_CODE_SCREENSHOTS)
+    bot.send_message(message.chat.id, "📸 Пришлите до 10 скриншотов:")
+
+
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SCREENSHOTS,
+)
+def handle_code_screenshots(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    if len(message.photo) + len(data.get("photos", [])) > 10:
+        bot.reply_to(message, "❌ Максимум 10 фото!")
+        return
+
+    data["photos"].extend([p.file_id for p in message.photo])
+    bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
+    bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+
+
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SPEAKER,
+)
+def handle_code_speaker(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+    data["speaker"] = message.text
+    bot.set_state(user_id, UserState.WAITING_CODE_ISLAND)
+    bot.send_message(message.chat.id, "🏝️ Введите название острова:")
+
+
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_ISLAND,
+)
+def handle_code_island(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+    data["island"] = message.text
+    send_to_news_chat(user_id, data)
+
+
+# Обработчики для USER_NEWS_POCKET
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREENS,
+)
+def handle_pocket_screens(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    # Проверяем количество фото в одном сообщении
+    if len(message.photo) != 2:
+        bot.reply_to(message, "❌ Отправьте ровно 2 скриншота ОДНИМ сообщением!")
+        return
+
+    data["photos"] = [p.file_id for p in message.photo]
+    send_to_news_chat(user_id, data)
+
+
+# Обработчики для USER_NEWS_DESIGN
+@bot.message_handler(
+    content_types=["text"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_DESIGN_CODE,
+)
+def handle_design_code(message):
+    user_id = message.from_user.id
+    code = message.text.upper()
+
+    if not validate_code(r"^MA-\d{4}-\d{4}-\d{4}$", code):
+        bot.reply_to(message, "❌ Неверный формат! Пример: MA-1234-5678-9012")
+        return
+
+    user_content_storage.get_data(user_id)["code"] = code
+    bot.set_state(user_id, UserState.WAITING_DESIGN_DESIGN_SCREEN)
+    bot.send_message(message.chat.id, "📸 Пришлите скриншот из приложения дизайнера:")
+
+
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda m: bot.get_state(m.from_user.id)
+    == UserState.WAITING_DESIGN_DESIGN_SCREEN,
+)
+def handle_design_screen(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    # Проверяем количество фото в сообщении
+    if len(message.photo) != 1:
+        bot.reply_to(message, "❌ Отправьте ровно 1 скриншот ОДНИМ сообщением!")
+        return
+
+    data["design_screen"] = message.photo[-1].file_id
+    bot.set_state(user_id, UserState.WAITING_DESIGN_GAME_SCREENS)
+    bot.send_message(
+        message.chat.id, "🎮 Пришлите до 9 скриншотов с применением рисунка в игре:"
+    )
+
+
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda m: bot.get_state(m.from_user.id)
+    == UserState.WAITING_DESIGN_GAME_SCREENS,
+)
+def handle_game_screens(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    remaining = 9 - len(data.get("game_screens", []))
+    if len(message.photo) > remaining:
+        bot.reply_to(message, f"❌ Можно добавить еще {remaining} фото!")
+        return
+
+    data["game_screens"].extend([p.file_id for p in message.photo])
+    send_to_news_chat(user_id, data)
+
+
+def send_to_news_chat(user_id, content_data):
+    try:
+        # Получаем данные из хранилища
+        data = user_content_storage.get_data(user_id)
+        target_chat = NEWSPAPER_CHAT_ID
+        user = bot.get_chat(user_id)
+        logger = logging.getLogger(__name__)
+
+        # Формируем информацию об отправителе
+        user_info = "\n👤 Отправитель: "
+        if user.username:
+            user_info += f"@{user.username}"
+            name_parts = []
+            if user.first_name:
+                name_parts.append(user.first_name)
+            if user.last_name:
+                name_parts.append(user.last_name)
+            if name_parts:
+                user_info += f" ({' '.join(name_parts)})"
+        else:
+            name_parts = []
+            if user.first_name:
+                name_parts.append(user.first_name)
+            if user.last_name:
+                name_parts.append(user.last_name)
+            user_info += (
+                f"{' '.join(name_parts)} [ID: {user_id}]"
+                if name_parts
+                else f"[ID: {user_id}]"
+            )
+
+        # Формируем контент в зависимости от типа
+        media = []
+        text = ""
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton(
+                "💬 Ответить", callback_data=f"reply_to_{user_id}"
+            )
+        )
+
+        # Дедупликация файлов перед отправкой
+        unique_files = []
+        seen_ids = set()
+
+        if data["type"] == "news":
+            # Новости
+            text = f"📰 {ButtonText.USER_NEWS_NEWS}\n"
+            if data.get("description"):
+                text += f"\n📝 {data['description']}"
+            text += f"\n👤 Спикер: {data.get('speaker', 'Не указан')}"
+            text += f"\n🏝️ Остров: {data.get('island', 'Не указан')}{user_info}"
+
+            # Дедупликация фото
+            for photo in data.get('photos', []):
+                file_info = bot.get_file(photo)
+                if file_info.file_unique_id not in seen_ids:
+                    unique_files.append(photo)
+                    seen_ids.add(file_info.file_unique_id)
+
+            # Создаем медиагруппу
+            for i, file_id in enumerate(unique_files):
+                media.append(
+                    types.InputMediaPhoto(file_id, caption=text if i == 0 else None)
+                )
+
+        elif data["type"] == "code":
+            # Коды
+            text = f"🔢 {ButtonText.USER_NEWS_CODE}\n"
+            text += f"\nКод: {data.get('code', 'Не указан')}"
+            text += f"\n👤 Спикер: {data.get('speaker', 'Не указан')}"
+            text += f"\n🏝️ Остров: {data.get('island', 'Не указан')}{user_info}"
+
+            # Дедупликация фото
+            for file_id in data["photos"]:
+                if file_id not in seen_ids:
+                    unique_files.append(file_id)
+                    seen_ids.add(file_id)
+
+            for i, file_id in enumerate(unique_files):
+                media.append(
+                    types.InputMediaPhoto(file_id, caption=text if i == 0 else None)
+                )
+
+        elif data["type"] == "pocket":
+            # Карточки дружбы
+            text = f"👋 {ButtonText.USER_NEWS_POCKET}{user_info}"
+
+            # Проверка количества фото
+            if len(data["photos"]) != 2:
+                raise ValueError("Требуется ровно 2 фото для карточки дружбы")
+
+            # Дедупликация не требуется, но проверяем уникальность
+            unique_files = list({photo: photo for photo in data["photos"]}.values())
+
+            media = [types.InputMediaPhoto(photo) for photo in unique_files]
+            if media:
+                media[0].caption = text
+
+        elif data["type"] == "design":
+            # Дизайны
+            text = f"🎨 {ButtonText.USER_NEWS_DESIGN}\n"
+            text += f"\nКод: {data.get('code', 'Не указан')}{user_info}"
+
+            # Основной скриншот
+            if not data.get("design_screen"):
+                raise ValueError("Отсутствует скриншот дизайна")
+
+            media.append(types.InputMediaPhoto(data["design_screen"], caption=text))
+
+            # Игровые скриншоты
+            unique_game_screens = list(
+                {p: p for p in data.get("game_screens", [])}.values()
+            )
+            media.extend([types.InputMediaPhoto(p) for p in unique_game_screens])
+
+        # Отправка контента с обработкой ошибок
+        try:
+            if media:
+                logger.debug(f"Отправка медиагруппы из {len(media)} элементов")
+                sent_messages = bot.send_media_group(target_chat, media)
+
+                # Добавляем кнопку только если есть подпись
+                if any(m.caption for m in media):
+                    try:
+                        bot.edit_message_reply_markup(
+                            chat_id=target_chat,
+                            message_id=sent_messages[-1].message_id,
+                            reply_markup=markup,
+                        )
+                    except ApiTelegramException as e:
+                        logger.warning(f"Не удалось добавить кнопку: {e}")
+                        bot.send_message(
+                            target_chat, "💬 Ответить:", reply_markup=markup
+                        )
+                else:
+                    bot.send_message(target_chat, "💬 Ответить:", reply_markup=markup)
+            else:
+                logger.warning("Нет медиа для отправки")
+                bot.send_message(target_chat, text, reply_markup=markup)
+
+        except ApiTelegramException as e:
+            error_msg = f"❌ Ошибка при отправке: {e.description}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
+        # Финализация
+        bot.send_message(
+            user_id,
+            "✅ Контент успешно отправлен!",
+            reply_markup=Menu.back_user_only_main_menu(),
+        )
+
+    except Exception as e:
+        error_msg = f"❌ Ошибка: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        bot.send_message(
+            user_id,
+            f"{error_msg}\nПопробуйте начать заново.",
+            reply_markup=Menu.back_user_only_main_menu(),
+        )
+    finally:
+        # Гарантированная очистка данных
+        user_content_storage.clear(user_id)
+        bot.delete_state(user_id)
+        logger.debug("Данные пользователя очищены")
