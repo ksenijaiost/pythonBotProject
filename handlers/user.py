@@ -399,9 +399,6 @@ def handle_send_method(call):
             reply_markup=Menu.contests_menu(),
         )
 
-        # Очистка данных
-        user_submissions.remove(user_id)
-
     except Exception as e:
         handle_submission_error(user_id, e)
         bot.answer_callback_query(call.id, "⚠️ Ошибка при отправке работы админам!")
