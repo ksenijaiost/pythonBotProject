@@ -17,7 +17,7 @@ from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
 
 # storage.py
