@@ -3,6 +3,7 @@ import logging
 import threading
 import re
 from telebot.apihelper import ApiTelegramException
+from collections import defaultdict
 from venv import logger
 from telebot import types
 import time
@@ -33,6 +34,10 @@ from weakref import WeakValueDictionary
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
+
+
+# Глобальный словарь для отслеживания медиагрупп
+media_groups = defaultdict(list)
 
 
 def is_user_in_chat(user_id):
@@ -494,7 +499,7 @@ def handle_user_to_admin(call):
     bot.send_message(
         call.message.chat.id,
         "📤 Что вы хотите отправить? Можно присылать:\n"
-        "- Текст\n- До 10 фото с текстом/без\n"
+        "- Текст\n- До 10 фото с текстом или без\n"
         "⚠️ Отправляйте все фото ОДНИМ сообщением!\n"
         "❌ Для отмены используйте /cancel",
         reply_markup=types.ForceReply(),
@@ -511,19 +516,40 @@ def handle_user_content(message):
     content_data = user_content_storage.get_data(user_id)
 
     try:
+        # Инициализация данных
+        if "photos" not in content_data:
+            content_data["photos"] = []
+
+        # Обработка медиагруппы
+        if message.media_group_id:
+            if message.media_group_id not in media_groups:
+                # Создаем задачу на завершение группы
+                timer = threading.Timer(
+                    2.0, process_media_group, args=[message.media_group_id, user_id]
+                )
+                timer.start()
+
+            # Сохраняем фото максимального качества
+            largest_photo = max(message.photo, key=lambda p: p.file_size)
+            media_groups[message.media_group_id].append(largest_photo.file_id)
+            return
+
+        # Одиночное фото
         if message.content_type == "photo":
-            if len(content_data["photos"]) >= 10:
-                bot.reply_to(message, "❌ Можно отправить не более 10 фото!")
-                return
+            largest_photo = max(message.photo, key=lambda p: p.file_size)
+            content_data["photos"].append(largest_photo.file_id)
 
-            photo_id = message.photo[-1].file_id
-            user_content_storage.add_photo(user_id, photo_id)
+        # Обработка текста
+        if message.content_type == "text":
+            content_data["text"] = message.text
 
-            if message.caption:
-                user_content_storage.set_text(user_id, message.caption)
+        # Проверка лимита
+        if len(content_data["photos"]) > 10:
+            bot.reply_to(message, "❌ Можно отправить не более 10 фото!")
+            content_data["photos"] = []
+            return
 
-        elif message.content_type == "text":
-            user_content_storage.set_text(user_id, message.text)
+        # Если текст есть или есть фото - отправляем
 
         # Проверяем завершенность
         if message.content_type == "text" or len(content_data["photos"]) > 0:
@@ -534,6 +560,25 @@ def handle_user_content(message):
     except Exception as e:
         logger.error(f"Content sending error: {e}")
         bot.reply_to(message, "❌ Ошибка обработки контента")
+
+
+def process_media_group(media_group_id, user_id):
+    content_data = user_content_storage.get_data(user_id)
+    photos = media_groups.pop(media_group_id, [])
+
+    # Проверяем лимит
+    if len(content_data["photos"]) + len(photos) > 10:
+        bot.send_message(user_id, "❌ Превышен лимит 10 фото!")
+        return
+
+    content_data["photos"].extend(photos)
+
+    # Отправляем подтверждение
+    bot.send_message(
+        user_id,
+        f"📷 Получено {len(photos)} фото. Отправьте текст или /cancel",
+        reply_markup=types.ForceReply(),
+    )
 
 
 def send_to_admin_chat(user_id, content_data):
@@ -667,7 +712,7 @@ def handle_user_news_news(call):
     bot.set_state(user_id, UserState.WAITING_NEWS_SCREENSHOTS)
     # Сначала редактируем сообщение БЕЗ ForceReply
     bot.edit_message_text(
-        text="📸 Пришлите до 10 скриншотов (отправьте все одним сообщением).",
+        text="📸 Пришлите до 10 скриншотов для новости (отправьте все одним сообщением).",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
     )
@@ -760,20 +805,29 @@ def handle_news_screenshots(message):
     data = user_content_storage.get_data(user_id)
 
     try:
-        # Собираем уникальные фото по file_unique_id (берем самое высокое качество)
-        unique_photos = {}
-        for photo in reversed(message.photo):
-            unique_photos[photo.file_unique_id] = photo.file_id
+        # Инициализируем список фото, если его нет
+        if "photos" not in data:
+            data["photos"] = []
 
-        new_files = list(unique_photos.values())
+        # Всегда берем фото максимального качества
+        largest_photo = max(message.photo, key=lambda p: p.file_size)
+
+        # Проверяем уникальность через file_unique_id
+        if not any(
+            p["unique_id"] == largest_photo.file_unique_id for p in data["photos"]
+        ):
+            data["photos"].append(
+                {
+                    "file_id": largest_photo.file_id,
+                    "unique_id": largest_photo.file_unique_id,
+                }
+            )
+
+        logger.debug(f"Текущее количество фото: {len(data['photos'])}")
 
         # Проверка лимита
-        if len(data["photos"]) + len(new_files) > 10:
-            raise ValueError("❌ Можно отправить не более 10 фото")
-
-        # Сохраняем только уникальные file_id
-        data["photos"].extend(new_files)
-        logger.debug(f"Добавлено {len(new_files)} уникальных фото")
+        if len(data["photos"]) > 10:
+            raise ValueError("Можно отправить не более 10 фото")
 
         # Запрашиваем описание только при первом добавлении фото
         if not data.get("description_requested"):
@@ -861,13 +915,34 @@ def handle_code_screenshots(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
 
-    if len(message.photo) + len(data.get("photos", [])) > 10:
-        bot.reply_to(message, "❌ Максимум 10 фото!")
-        return
+    try:
+        # Всегда берем фото максимального качества
+        largest_photo = max(message.photo, key=lambda p: p.file_size)
+        
+        # Проверяем уникальность через file_unique_id
+        if not any(p["unique_id"] == largest_photo.file_unique_id for p in data["photos"]):
+            data["photos"].append({
+                "file_id": largest_photo.file_id,
+                "unique_id": largest_photo.file_unique_id
+            })
+            logger.debug(f"Добавлено фото. Текущее количество: {len(data['photos'])}")
+        
+        logger.debug(f"Всего прислано {len(data['photos'])} фото.")
 
-    data["photos"].extend([p.file_id for p in message.photo])
-    bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
-    bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+        # Проверка лимита
+        if len(data["photos"]) > 10:
+            bot.reply_to(message, "❌ Максимум 10 фото!")
+            return
+
+        # Запрашиваем имя спикера только при первом добавлении
+        if not data.get("speaker_requested"):
+            data["speaker_requested"] = True
+            bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
+            bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки фото: {str(e)}")
+        bot.reply_to(message, "⚠️ Произошла ошибка обработки фото")
 
 
 @bot.message_handler(
@@ -901,6 +976,11 @@ def handle_code_island(message):
 def handle_pocket_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
+
+    # Сохраняем как словари
+    data["photos"] = [
+        {"file_id": p.file_id, "unique_id": p.file_unique_id} for p in message.photo
+    ]
 
     # Проверяем количество фото в одном сообщении
     if len(message.photo) != 2:
@@ -999,7 +1079,7 @@ def send_to_news_chat(user_id, content_data):
                 else f"[ID: {user_id}]"
             )
 
-        # Формируем контент в зависимости от типа
+        # Формируем медиагруппу
         media = []
         text = ""
         markup = types.InlineKeyboardMarkup()
@@ -1009,82 +1089,91 @@ def send_to_news_chat(user_id, content_data):
             )
         )
 
-        # Дедупликация файлов перед отправкой
-        unique_files = []
-        seen_ids = set()
-
+        # Обработка для каждого типа контента
         if data["type"] == "news":
-            # Новости
-            text = f"📰 {ButtonText.USER_NEWS_NEWS}\n"
+            text = f"{ButtonText.USER_NEWS_NEWS}\n"
             if data.get("description"):
                 text += f"\n📝 {data['description']}"
             text += f"\n👤 Спикер: {data.get('speaker', 'Не указан')}"
             text += f"\n🏝️ Остров: {data.get('island', 'Не указан')}{user_info}"
 
-            # Дедупликация фото
-            for photo in data.get('photos', []):
-                file_info = bot.get_file(photo)
-                if file_info.file_unique_id not in seen_ids:
-                    unique_files.append(photo)
-                    seen_ids.add(file_info.file_unique_id)
+            # Формируем медиагруппу с дедупликацией
+            seen_ids = set()
+            unique_photos = []
+            for photo in data["photos"]:
+                if photo["unique_id"] not in seen_ids:
+                    seen_ids.add(photo["unique_id"])
+                    unique_photos.append(photo)
 
-            # Создаем медиагруппу
-            for i, file_id in enumerate(unique_files):
-                media.append(
-                    types.InputMediaPhoto(file_id, caption=text if i == 0 else None)
-                )
+            media = [
+                types.InputMediaPhoto(photo["file_id"]) for photo in unique_photos[:10]
+            ]
+            if media:
+                media[0].caption = text
 
         elif data["type"] == "code":
-            # Коды
-            text = f"🔢 {ButtonText.USER_NEWS_CODE}\n"
+            text = f"{ButtonText.USER_NEWS_CODE}\n"
             text += f"\nКод: {data.get('code', 'Не указан')}"
             text += f"\n👤 Спикер: {data.get('speaker', 'Не указан')}"
             text += f"\n🏝️ Остров: {data.get('island', 'Не указан')}{user_info}"
 
             # Дедупликация фото
-            for file_id in data["photos"]:
-                if file_id not in seen_ids:
-                    unique_files.append(file_id)
-                    seen_ids.add(file_id)
+            seen_ids = set()
+            unique_photos = []
+            for photo in data["photos"]:
+                if photo["unique_id"] not in seen_ids:
+                    seen_ids.add(photo["unique_id"])
+                    unique_photos.append(photo["file_id"])  # Сохраняем только file_id
 
-            for i, file_id in enumerate(unique_files):
-                media.append(
-                    types.InputMediaPhoto(file_id, caption=text if i == 0 else None)
-                )
+            # Формируем медиагруппу
+            media = []
+            for i, file_id in enumerate(unique_photos):
+                media.append(types.InputMediaPhoto(
+                    media=file_id,
+                    caption=text if i == 0 else None
+                ))
+                if i >= 9:  # Лимит 10 фото
+                    break
 
         elif data["type"] == "pocket":
-            # Карточки дружбы
-            text = f"👋 {ButtonText.USER_NEWS_POCKET}{user_info}"
+            text = f"{ButtonText.USER_NEWS_POCKET}{user_info}"
 
-            # Проверка количества фото
-            if len(data["photos"]) != 2:
-                raise ValueError("Требуется ровно 2 фото для карточки дружбы")
+            # Проверка уникальности
+            seen_ids = set()
+            unique_photos = []
+            for photo in data["photos"]:
+                if photo["unique_id"] not in seen_ids:
+                    seen_ids.add(photo["unique_id"])
+                    unique_photos.append(photo)
 
-            # Дедупликация не требуется, но проверяем уникальность
-            unique_files = list({photo: photo for photo in data["photos"]}.values())
+            if len(unique_photos) != 2:
+                raise ValueError("Требуется ровно 2 уникальных фото")
 
-            media = [types.InputMediaPhoto(photo) for photo in unique_files]
-            if media:
-                media[0].caption = text
+            media = [
+                types.InputMediaPhoto(unique_photos[0]["file_id"], caption=text),
+                types.InputMediaPhoto(unique_photos[1]["file_id"]),
+            ]
 
         elif data["type"] == "design":
-            # Дизайны
-            text = f"🎨 {ButtonText.USER_NEWS_DESIGN}\n"
+            text = f"{ButtonText.USER_NEWS_DESIGN}\n"
             text += f"\nКод: {data.get('code', 'Не указан')}{user_info}"
 
             # Основной скриншот
             if not data.get("design_screen"):
                 raise ValueError("Отсутствует скриншот дизайна")
 
-            media.append(types.InputMediaPhoto(data["design_screen"], caption=text))
+            media = [
+                types.InputMediaPhoto(data["design_screen"]["file_id"], caption=text)
+            ]
 
             # Игровые скриншоты
-            unique_game_screens = list(
-                {p: p for p in data.get("game_screens", [])}.values()
-            )
-            media.extend([types.InputMediaPhoto(p) for p in unique_game_screens])
+            seen_ids = set()
+            for photo in data.get("game_screens", []):
+                if photo["unique_id"] not in seen_ids:
+                    media.append(types.InputMediaPhoto(photo["file_id"]))
+                    seen_ids.add(photo["unique_id"])
 
-        # Отправка контента с обработкой ошибок
+        # Отправка контента
         try:
             if media:
                 logger.debug(f"Отправка медиагруппы из {len(media)} элементов")

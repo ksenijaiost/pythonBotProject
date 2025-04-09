@@ -339,11 +339,13 @@ class UserContentStorage:
 
     def init_content(self, user_id, target_chat):
         with self.lock:
-            self.data[user_id] = {
-                "target_chat": target_chat,
-                "photos": [],
-                "text": None,
-            }
+            self.data[user_id] = (
+                {
+                    "target_chat": target_chat,
+                    "photos": [],
+                    "text": None,
+                },
+            )
 
     def add_photo(self, user_id, photo_id):
         with self.lock:
