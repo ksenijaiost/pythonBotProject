@@ -484,6 +484,37 @@ def handle_user_turnip(call):
 
 
 # СООБЩЕНИЕ АДМИНАМ
+@bot.message_handler(
+    commands=["cancel"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    in [
+        UserState.WAITING_ADMIN_CONTENT,
+        UserState.WAITING_ADMIN_CONTENT_PHOTO,
+        UserState.WAITING_NEWS_SCREENSHOTS,
+        UserState.WAITING_NEWS_DESCRIPTION,
+        UserState.WAITING_NEWS_SPEAKER,
+        UserState.WAITING_NEWS_ISLAND,
+        UserState.WAITING_CODE_VALUE,
+        UserState.WAITING_CODE_SCREENSHOTS,
+        UserState.WAITING_CODE_SPEAKER,
+        UserState.WAITING_CODE_ISLAND,
+        UserState.WAITING_POCKET_SCREENS,
+        UserState.WAITING_DESIGN_CODE,
+        UserState.WAITING_DESIGN_DESIGN_SCREEN,
+        UserState.WAITING_DESIGN_GAME_SCREENS,
+    ],
+)
+def handle_cancel(message):
+    user_id = message.from_user.id
+    user_content_storage.clear(user_id)
+    bot.delete_state(user_id)
+    bot.send_message(
+        message.chat.id,
+        "🚫 Отправка отменена",
+        reply_markup=Menu.back_user_only_main_menu(),
+    )
+    if user_id in temp_storage:
+        del temp_storage[user_id]
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
@@ -506,10 +537,15 @@ def handle_user_to_admin(call):
 
 @bot.message_handler(
     content_types=["text"],
-    func=lambda message: bot.get_state(message.from_user.id)
-    in [UserState.WAITING_ADMIN_CONTENT],
+    func=lambda message: (
+        bot.get_state(message.from_user.id) == UserState.WAITING_ADMIN_CONTENT
+        and not message.text.startswith("/")
+    ),
 )
 def handle_user_text(message):
+    if message.text.startswith('/'):
+        bot.send_message(message.chat.id, "⚠️ Используйте /cancel для отмены")
+        return
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
     content_data["text"] = message.text
@@ -633,36 +669,39 @@ def preview_to_admin_chat(user_id, content_data):
 
 
 # Обработчик кнопок подтверждения
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('confirm_send', 'cancel_send')))
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith(("confirm_send", "cancel_send"))
+)
 def handle_confirmation(call):
     try:
-        action, user_id = call.data.split(':')
+        action, user_id = call.data.split(":")
         user_id = int(user_id)
-        
+
         # Удаляем сообщение с кнопками
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        
+
         if action == "confirm_send":
             # Получаем данные из хранилища
             content_data = temp_storage.get(user_id)
-            
+
             if content_data:
                 # Вызываем функцию отправки
                 send_to_admin_chat(user_id, content_data)
                 bot.answer_callback_query(call.id, "✅ Отправлено администраторам")
             else:
                 bot.answer_callback_query(call.id, "❌ Данные устарели")
-                
+
         elif action == "cancel_send":
             bot.answer_callback_query(call.id, "❌ Отправка отменена")
-            
+
     except Exception as e:
         logger.error(f"Confirmation error: {e}")
-        
+
     finally:
         # Очищаем хранилище
         if user_id in temp_storage:
             del temp_storage[user_id]
+
 
 def send_to_admin_chat(user_id, content_data):
     try:
@@ -733,37 +772,6 @@ def send_to_admin_chat(user_id, content_data):
         # Очищаем хранилище
         if user_id in temp_storage:
             del temp_storage[user_id]
-
-
-@bot.message_handler(
-    commands=["cancel"],
-    func=lambda message: bot.get_state(message.from_user.id)
-    in [
-        UserState.WAITING_ADMIN_CONTENT,
-        UserState.WAITING_ADMIN_CONTENT_PHOTO,
-        UserState.WAITING_NEWS_SCREENSHOTS,
-        UserState.WAITING_NEWS_DESCRIPTION,
-        UserState.WAITING_NEWS_SPEAKER,
-        UserState.WAITING_NEWS_ISLAND,
-        UserState.WAITING_CODE_VALUE,
-        UserState.WAITING_CODE_SCREENSHOTS,
-        UserState.WAITING_CODE_SPEAKER,
-        UserState.WAITING_CODE_ISLAND,
-        UserState.WAITING_POCKET_SCREENS,
-        UserState.WAITING_DESIGN_CODE,
-        UserState.WAITING_DESIGN_DESIGN_SCREEN,
-        UserState.WAITING_DESIGN_GAME_SCREENS,
-    ],
-)
-def handle_cancel(message):
-    user_id = message.from_user.id
-    user_content_storage.clear(user_id)
-    bot.delete_state(user_id)
-    bot.send_message(
-        message.chat.id,
-        "🚫 Отправка отменена",
-        reply_markup=Menu.back_user_only_main_menu(),
-    )
 
 
 # ОТПРАВКА НОВОСТЕЙ
@@ -972,7 +980,7 @@ def handle_news_island(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
     data["island"] = message.text
-    send_to_news_chat(user_id, data)
+    send_to_news_chat(user_id)
 
 
 # Обработчики для USER_NEWS_CODE
@@ -1055,7 +1063,7 @@ def handle_code_island(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
     data["island"] = message.text
-    send_to_news_chat(user_id, data)
+    send_to_news_chat(user_id)
 
 
 # Обработчики для USER_NEWS_POCKET
@@ -1078,7 +1086,7 @@ def handle_pocket_screens(message):
         return
 
     data["photos"] = [p.file_id for p in message.photo]
-    send_to_news_chat(user_id, data)
+    send_to_news_chat(user_id)
 
 
 # Обработчики для USER_NEWS_DESIGN
@@ -1135,10 +1143,10 @@ def handle_game_screens(message):
         return
 
     data["game_screens"].extend([p.file_id for p in message.photo])
-    send_to_news_chat(user_id, data)
+    send_to_news_chat(user_id)
 
 
-def send_to_news_chat(user_id, content_data):
+def send_to_news_chat(user_id):
     try:
         # Получаем данные из хранилища
         data = user_content_storage.get_data(user_id)
