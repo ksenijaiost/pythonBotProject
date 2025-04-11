@@ -516,7 +516,9 @@ def handle_cancel(message):
     if user_id in temp_storage:
         del temp_storage[user_id]
 
+
 # СООБЩЕНИЕ АДМИНАМ
+
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
 def handle_user_to_admin(call):
@@ -544,7 +546,7 @@ def handle_user_to_admin(call):
     ),
 )
 def handle_user_text(message):
-    if message.text.startswith('/'):
+    if message.text.startswith("/"):
         bot.send_message(message.chat.id, "⚠️ Используйте /cancel для отмены")
         return
     user_id = message.from_user.id
@@ -847,15 +849,17 @@ def handle_news_code(call):
 def handle_news_pocket(call):
     user_id = call.from_user.id
     user_content_storage.init_pocket(user_id)
-    bot.set_state(user_id, UserState.WAITING_POCKET_SCREENS)
+    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_1)
     bot.edit_message_text(
-        text='📸 Пришлите 2 скриншота карточки дружбы (лицевая и обратная сторона, лучше через кнопку "SAVE")',
+        text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы - лицевую и обратную стороны.\n"
+        'Лучше всего это сделать через кнопку "SAVE"!\n'
+        "❌ Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
     )
     bot.send_message(
         call.message.chat.id,
-        "⬇️ Отправьте скриншоты в этом чате:",
+        "⬇️ Отправьте скриншот лицевой стороны (с персонажем):",
         parse_mode="Markdown",
         reply_markup=types.ForceReply(selective=True),
     )
@@ -1070,24 +1074,69 @@ def handle_code_island(message):
 # Обработчики для USER_NEWS_POCKET
 @bot.message_handler(
     content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREENS,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN_1,
 )
 def handle_pocket_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
 
-    # Сохраняем как словари
-    data["photos"] = [
-        {"file_id": p.file_id, "unique_id": p.file_unique_id} for p in message.photo
-    ]
+    # Сохраняем последний (наибольший) размер фото
+    photo_data = {
+        "file_id": message.photo[-1].file_id,
+        "unique_id": message.photo[-1].file_unique_id
+    }
+    data["photos"].append(photo_data)
+    user_content_storage.update_data(user_id, data)
 
-    # Проверяем количество фото в одном сообщении
-    if len(message.photo) != 2:
-        bot.reply_to(message, "❌ Отправьте ровно 2 скриншота ОДНИМ сообщением!")
+    # Меняем состояние на ожидание второго фото
+    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_2)
+
+    bot.send_message(
+        message.chat.id,
+        "✅ Первый скриншот принят!\n"
+        "Теперь отправьте второй скриншот - обратную сторону с QR-кодом.\n"
+        "❌ Для отмены используйте /cancel",
+        reply_markup=types.ForceReply(),
+    )
+
+
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN_2,
+)
+def handle_pocket_screens(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    # Сохраняем последний размер фото
+    new_photo_data = {
+        "file_id": message.photo[-1].file_id,
+        "unique_id": message.photo[-1].file_unique_id
+    }
+    data["photos"].append(new_photo_data)
+
+    # Проверяем что собрано 2 фото
+    if len(data["photos"]) != 2:
+        bot.send_message(message.chat.id, "❌ Ошибка обработки, начните заново")
         return
 
-    data["photos"] = [p.file_id for p in message.photo]
+    # Завершаем процесс
+    bot.delete_state(user_id)
+
     send_to_news_chat(user_id)
+
+
+# Обработчик неверного контента
+@bot.message_handler(
+    func=lambda m: bot.get_state(m.from_user.id)
+    in [UserState.WAITING_POCKET_SCREEN_1, UserState.WAITING_POCKET_SCREEN_2]
+    and m.content_type != "photo"
+)
+def handle_invalid_content(message):
+    bot.send_message(
+        message.chat.id,
+        "❌ Пожалуйста, отправьте фото\n ❌ Для отмены используйте /cancel",
+    )
 
 
 # Обработчики для USER_NEWS_DESIGN

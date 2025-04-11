@@ -362,7 +362,7 @@ class UserContentStorage:
     def get_data(self, user_id):
         with self.lock:
             return self.data.get(user_id)
-    
+
     def update_data(self, user_id, new_data):
         self.data[user_id] = new_data
 
@@ -388,7 +388,7 @@ class UserContentStorage:
         }
 
     def init_pocket(self, user_id):
-        self.data[user_id] = {"type": "pocket", "photos": []}
+        self.data[user_id] = {"type": "pocket", "photos": [], "media_group_id": None}
 
     def init_design(self, user_id):
         self.data[user_id] = {

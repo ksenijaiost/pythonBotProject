@@ -98,7 +98,8 @@ class UserState:
     WAITING_CODE_SPEAKER = 'waiting_code_speaker'
     WAITING_CODE_ISLAND = 'waiting_code_island'
     
-    WAITING_POCKET_SCREENS = 'waiting_pocket_screens'
+    WAITING_POCKET_SCREEN_1 = 'waiting_pocket_screen_1'
+    WAITING_POCKET_SCREEN_2 = 'waiting_pocket_screen_2'
 
     WAITING_DESIGN_CODE = 'waiting_design_code'
     WAITING_DESIGN_DESIGN_SCREEN = 'waiting_design_design_screen'
