@@ -505,14 +505,19 @@ def handle_adm_add_guide(call):
         reply_markup=Menu.adm_menu(),
     )
 
+
+# Глобальное хранилище для ответов
+admin_replies = {}
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('reply_to_'))
 def handle_reply_button(call):
     try:
         user_id = int(call.data.split('_')[-1])
         bot.answer_callback_query(call.id)
         
-        # Сохраняем user_id для следующего шага
-        bot.add_data(call.from_user.id, reply_user_id=user_id)
+        # Сохраняем связь админ -> пользователь
+        admin_replies[call.from_user.id] = user_id
         
         msg = bot.send_message(
             call.message.chat.id,
@@ -527,10 +532,11 @@ def handle_reply_button(call):
 
 def process_admin_reply(message):
     try:
-        user_data = bot.get_data(message.from_user.id)
-        user_id = user_data.get('reply_user_id')
+        # Получаем user_id из хранилища
+        user_id = admin_replies.get(message.from_user.id)
         
         if not user_id:
+            bot.send_message(message.chat.id, "❌ Сессия ответа устарела")
             return
             
         bot.send_message(
@@ -541,6 +547,9 @@ def process_admin_reply(message):
             message.chat.id,
             f"✅ Ответ отправлен пользователю"
         )
+
+        # Очищаем хранилище после отправки
+        del admin_replies[message.from_user.id]
         
     except ApiTelegramException as e:
         if e.description == "Forbidden: bot was blocked by the user":

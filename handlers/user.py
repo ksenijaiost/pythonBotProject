@@ -498,87 +498,80 @@ def handle_user_to_admin(call):
 
     bot.send_message(
         call.message.chat.id,
-        "📤 Что вы хотите отправить? Можно присылать:\n"
-        "- Текст\n- До 10 фото с текстом или без\n"
-        "⚠️ Отправляйте все фото ОДНИМ сообщением!\n"
+        "📤 Пришлите текст, который хотели бы отправить админам (о фото я спрошу позже)\n"
         "❌ Для отмены используйте /cancel",
         reply_markup=types.ForceReply(),
     )
 
 
 @bot.message_handler(
-    content_types=["text", "photo"],
+    content_types=["text"],
     func=lambda message: bot.get_state(message.from_user.id)
     in [UserState.WAITING_ADMIN_CONTENT],
+)
+def handle_user_text(message):
+    user_id = message.from_user.id
+    content_data = user_content_storage.get_data(user_id)
+    content_data["text"] = message.text
+    bot.set_state(user_id, UserState.WAITING_ADMIN_CONTENT_PHOTO)
+    bot.send_message(
+        message.chat.id,
+        "Теперь можете прислать фото.\nЕсли их нет, нажмите /skip",
+        reply_markup=types.ForceReply(),
+    )
+
+@bot.message_handler(
+    commands=["skip"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_ADMIN_CONTENT_PHOTO,
+)
+def skip_news_description(message):
+    user_id = message.from_user.id
+    content_data = user_content_storage.get_data(user_id)
+    send_to_admin_chat(user_id, content_data)
+
+
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    in [UserState.WAITING_ADMIN_CONTENT_PHOTO],
 )
 def handle_user_content(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
-
     try:
-        # Инициализация данных
-        if "photos" not in content_data:
-            content_data["photos"] = []
+        if message.photo:
+            # Берем самое высокое разрешение (последний элемент в списке)
+            photo_id = message.photo[-1].file_id
 
-        # Обработка медиагруппы
-        if message.media_group_id:
-            if message.media_group_id not in media_groups:
-                # Создаем задачу на завершение группы
-                timer = threading.Timer(
-                    2.0, process_media_group, args=[message.media_group_id, user_id]
+            if len(content_data["photos"]) < 10:
+                content_data["photos"].append(photo_id)
+                bot.reply_to(
+                    message,
+                    f"Скриншот принят ({len(content_data['photos'])}/10). Если это всё, нажмите /done",
                 )
-                timer.start()
 
-            # Сохраняем фото максимального качества
-            largest_photo = max(message.photo, key=lambda p: p.file_size)
-            media_groups[message.media_group_id].append(largest_photo.file_id)
-            return
-
-        # Одиночное фото
-        if message.content_type == "photo":
-            largest_photo = max(message.photo, key=lambda p: p.file_size)
-            content_data["photos"].append(largest_photo.file_id)
-
-        # Обработка текста
-        if message.content_type == "text":
-            content_data["text"] = message.text
-
-        # Проверка лимита
-        if len(content_data["photos"]) > 10:
-            bot.reply_to(message, "❌ Можно отправить не более 10 фото!")
-            content_data["photos"] = []
-            return
-
-        # Если текст есть или есть фото - отправляем
-
-        # Проверяем завершенность
-        if message.content_type == "text" or len(content_data["photos"]) > 0:
-            send_to_admin_chat(user_id, content_data)
-            user_content_storage.clear(user_id)
-            bot.delete_state(user_id)
+                # Автоматическая отправка при достижении лимита
+                if len(content_data["photos"]) == 10:
+                    send_to_admin_chat(user_id, content_data)
+            else:
+                bot.send_message(message.chat.id, "Максимум 10 скриншотов!")
+        else:
+            bot.send_message(message.chat.id, "Пожалуйста, отправляйте только фото")
 
     except Exception as e:
         logger.error(f"Content sending error: {e}")
         bot.reply_to(message, "❌ Ошибка обработки контента")
 
 
-def process_media_group(media_group_id, user_id):
+@bot.message_handler(
+    commands=["done"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    in [UserState.WAITING_ADMIN_CONTENT_PHOTO],
+)
+def handle_done(message):
+    user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
-    photos = media_groups.pop(media_group_id, [])
-
-    # Проверяем лимит
-    if len(content_data["photos"]) + len(photos) > 10:
-        bot.send_message(user_id, "❌ Превышен лимит 10 фото!")
-        return
-
-    content_data["photos"].extend(photos)
-
-    # Отправляем подтверждение
-    bot.send_message(
-        user_id,
-        f"📷 Получено {len(photos)} фото. Отправьте текст или /cancel",
-        reply_markup=types.ForceReply(),
-    )
+    send_to_admin_chat(user_id, content_data)
 
 
 def send_to_admin_chat(user_id, content_data):
@@ -614,18 +607,18 @@ def send_to_admin_chat(user_id, content_data):
         if photos:
             media = [
                 types.InputMediaPhoto(
-                    photo, caption=f"{text or ''}{user_info}" if i == 0 else None
+                    media=photo_id, caption=content_data["text"] if i == 0 else ""
                 )
-                for i, photo in enumerate(photos)
+                for i, photo_id in enumerate(content_data["photos"])
             ]
 
             # Отправляем медиагруппу БЕЗ reply_markup
-            sent_messages = bot.send_media_group(target_chat, media)
+            bot.send_media_group(target_chat, media)
 
             # Добавляем кнопку к последнему сообщению в группе
-            bot.edit_message_reply_markup(
-                chat_id=target_chat,
-                message_id=sent_messages[-1].message_id,
+            bot.send_message(
+                target_chat,
+                text=f"{user_info}\nХотите ответить?",
                 reply_markup=markup,
             )
 
@@ -692,8 +685,6 @@ def handle_user_to_news(call):
             reply_markup=Menu.back_user_only_main_menu(),
         )
         return
-    user_id = call.from_user.id
-    user_content_storage.init_content(user_id, NEWSPAPER_CHAT_ID)
 
     bot.edit_message_text(
         text="Что вы хотите прислать в новостную колонку?",
@@ -918,15 +909,19 @@ def handle_code_screenshots(message):
     try:
         # Всегда берем фото максимального качества
         largest_photo = max(message.photo, key=lambda p: p.file_size)
-        
+
         # Проверяем уникальность через file_unique_id
-        if not any(p["unique_id"] == largest_photo.file_unique_id for p in data["photos"]):
-            data["photos"].append({
-                "file_id": largest_photo.file_id,
-                "unique_id": largest_photo.file_unique_id
-            })
+        if not any(
+            p["unique_id"] == largest_photo.file_unique_id for p in data["photos"]
+        ):
+            data["photos"].append(
+                {
+                    "file_id": largest_photo.file_id,
+                    "unique_id": largest_photo.file_unique_id,
+                }
+            )
             logger.debug(f"Добавлено фото. Текущее количество: {len(data['photos'])}")
-        
+
         logger.debug(f"Всего прислано {len(data['photos'])} фото.")
 
         # Проверка лимита
@@ -1128,10 +1123,11 @@ def send_to_news_chat(user_id, content_data):
             # Формируем медиагруппу
             media = []
             for i, file_id in enumerate(unique_photos):
-                media.append(types.InputMediaPhoto(
-                    media=file_id,
-                    caption=text if i == 0 else None
-                ))
+                media.append(
+                    types.InputMediaPhoto(
+                        media=file_id, caption=text if i == 0 else None
+                    )
+                )
                 if i >= 9:  # Лимит 10 фото
                     break
 

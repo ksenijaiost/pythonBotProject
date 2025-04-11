@@ -86,6 +86,7 @@ class ConstantLinks:
 
 class UserState:
     WAITING_ADMIN_CONTENT = "waiting_admin_content"
+    WAITING_ADMIN_CONTENT_PHOTO = "waiting_admin_content_photo"
     
     WAITING_NEWS_SCREENSHOTS = 'waiting_news_screens'
     WAITING_NEWS_DESCRIPTION = 'waiting_news_desc'
