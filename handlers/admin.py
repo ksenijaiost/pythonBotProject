@@ -17,7 +17,7 @@ from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
 
 # storage.py
@@ -505,43 +505,55 @@ def handle_adm_add_guide(call):
         reply_markup=Menu.adm_menu(),
     )
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('reply_to_'))
+
+# Глобальное хранилище для ответов
+admin_replies = {}
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reply_to_"))
 def handle_reply_button(call):
     try:
-        user_id = int(call.data.split('_')[-1])
+        user_id = int(call.data.split("_")[-1])
         bot.answer_callback_query(call.id)
-        
-        # Сохраняем user_id для следующего шага
-        bot.add_data(call.from_user.id, reply_user_id=user_id)
-        
+
+        # Сохраняем связь админ -> пользователь
+        admin_replies[call.from_user.id] = user_id
+
         msg = bot.send_message(
             call.message.chat.id,
             f"✍️ Введите ответ для пользователя:",
-            reply_markup=types.ForceReply()
+            reply_markup=types.ForceReply(),
         )
         bot.register_next_step_handler(msg, process_admin_reply)
-        
+
     except Exception as e:
         logger.error(f"Reply error: {e}")
         bot.answer_callback_query(call.id, "❌ Ошибка", show_alert=True)
 
+
 def process_admin_reply(message):
     try:
-        user_data = bot.get_data(message.from_user.id)
-        user_id = user_data.get('reply_user_id')
-        
+        # Получаем user_id из хранилища
+        user_id = admin_replies.get(message.from_user.id)
+
         if not user_id:
+            bot.send_message(message.chat.id, "❌ Сессия ответа устарела")
             return
-            
+
         bot.send_message(
             user_id,
-            f"📨 Сообщение от администратора:\n{message.text}"
+            f"📨 Сообщение от администратора:\n{message.text}",
+            reply_markup=Menu.user_to_admin_or_main_menu(),
         )
         bot.send_message(
             message.chat.id,
-            f"✅ Ответ отправлен пользователю"
+            f"✅ Ответ отправлен пользователю",
+            reply_markup=Menu.adm_menu(),
         )
-        
+
+        # Очищаем хранилище после отправки
+        del admin_replies[message.from_user.id]
+
     except ApiTelegramException as e:
         if e.description == "Forbidden: bot was blocked by the user":
             bot.send_message(message.chat.id, "❌ Пользователь заблокировал бота")
