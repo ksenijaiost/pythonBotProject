@@ -543,18 +543,38 @@ def handle_user_content(message):
             # Берем самое высокое разрешение (последний элемент в списке)
             photo_id = message.photo[-1].file_id
 
-            if len(content_data["photos"]) < 10:
-                content_data["photos"].append(photo_id)
-                bot.reply_to(
-                    message,
-                    f"Скриншот принят ({len(content_data['photos'])}/10). Если это всё, нажмите /done",
-                )
-
-                # Автоматическая отправка при достижении лимита
-                if len(content_data["photos"]) == 10:
-                    send_to_admin_chat(user_id, content_data)
-            else:
+            if len(content_data["photos"]) > 10:
                 bot.send_message(message.chat.id, "Максимум 10 скриншотов!")
+                return
+
+            content_data["photos"].append(photo_id)
+            new_count = len(content_data["photos"])
+             # Удаляем предыдущее сообщение-счетчик если есть
+            if content_data.get("counter_msg_id"):
+                try:
+                    bot.delete_message(
+                        chat_id=message.chat.id,
+                        message_id=content_data["counter_msg_id"]
+                    )
+                except Exception as delete_error:
+                    logger.debug(f"Не удалось удалить сообщение: {delete_error}")
+
+            # Отправляем новое сообщение с актуальным счетчиком
+            msg = bot.send_message(
+                message.chat.id,
+                f"📸 Принято скриншотов: {new_count}/10\n"
+                "Отправьте ещё фото или нажмите /done",
+            )
+            
+            # Обновляем ID последнего сообщения в хранилище
+            content_data["counter_msg_id"] = msg.message_id
+            user_content_storage.update_data(user_id, content_data)
+
+            if new_count == 10:
+                send_to_admin_chat(user_id, content_data)
+                # Удаляем сообщение-счетчик
+                bot.delete_message(message.chat.id, content_data["counter_msg_id"])
+
         else:
             bot.send_message(message.chat.id, "Пожалуйста, отправляйте только фото")
 
@@ -571,7 +591,17 @@ def handle_user_content(message):
 def handle_done(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
+    # Удаляем последнее сообщение-счетчик
+    if content_data.get("counter_msg_id"):
+        try:
+            bot.delete_message(message.chat.id, content_data["counter_msg_id"])
+        except Exception as e:
+            logger.debug(f"Ошибка удаления сообщения: {e}")
+    
     send_to_admin_chat(user_id, content_data)
+    
+    # Очищаем данные
+    user_content_storage.clear(user_id)
 
 
 def send_to_admin_chat(user_id, content_data):
@@ -725,7 +755,7 @@ def handle_news_code(call):
     user_content_storage.init_code(user_id)
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
-        text="🔢 Пришлите код\nФормат (важен): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 цифры)",
+        text="🔢 Пришлите код\nФормат (важен!): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 ваши цифры)",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
     )

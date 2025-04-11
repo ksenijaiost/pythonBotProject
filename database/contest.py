@@ -342,7 +342,12 @@ class UserContentStorage:
             "target_chat": target_chat,
             "photos": [],
             "text": None,
+            "counter_msg_id": None,
         }
+
+    def update_counter_message(self, user_id, message_id):
+        if user_id in self.data:
+            self.data[user_id]["counter_msg_id"] = message_id
 
     def add_photo(self, user_id, photo_id):
         with self.lock:
@@ -357,6 +362,9 @@ class UserContentStorage:
     def get_data(self, user_id):
         with self.lock:
             return self.data.get(user_id)
+    
+    def update_data(self, user_id, new_data):
+        self.data[user_id] = new_data
 
     def init_news(self, user_id):
         self.data[user_id] = {
