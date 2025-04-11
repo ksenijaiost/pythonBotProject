@@ -483,7 +483,7 @@ def handle_user_turnip(call):
     )
 
 
-# СООБЩЕНИЕ АДМИНАМ
+# Общий обработчик отвмены для сообщения админам и новостей
 @bot.message_handler(
     commands=["cancel"],
     func=lambda message: bot.get_state(message.from_user.id)
@@ -516,6 +516,7 @@ def handle_cancel(message):
     if user_id in temp_storage:
         del temp_storage[user_id]
 
+# СООБЩЕНИЕ АДМИНАМ
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
 def handle_user_to_admin(call):
