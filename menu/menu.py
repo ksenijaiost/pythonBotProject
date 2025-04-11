@@ -16,6 +16,21 @@ class Menu:
         )
 
         return back_menu
+    
+    @staticmethod
+    def user_to_admin_or_main_menu():
+        """Пользовательское меню - написать админам или назад в главное"""
+        back_menu = types.InlineKeyboardMarkup(row_width=1)
+        back_menu.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_TO_ADMIN, callback_data=ButtonCallback.USER_TO_ADMIN
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            ),
+        )
+
+        return back_menu
 
     @staticmethod
     def back_user_contest_menu():
