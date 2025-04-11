@@ -394,8 +394,9 @@ class UserContentStorage:
         self.data[user_id] = {
             "type": "design",
             "code": None,
-            "design_screen": None,
+            "design_screen": [],
             "game_screens": [],
+            "progress_message_id": None,
         }
 
     def clear(self, user_id):

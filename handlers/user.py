@@ -498,7 +498,8 @@ def handle_user_turnip(call):
         UserState.WAITING_CODE_SCREENSHOTS,
         UserState.WAITING_CODE_SPEAKER,
         UserState.WAITING_CODE_ISLAND,
-        UserState.WAITING_POCKET_SCREENS,
+        UserState.WAITING_POCKET_SCREEN_1,
+        UserState.WAITING_POCKET_SCREEN_2,
         UserState.WAITING_DESIGN_CODE,
         UserState.WAITING_DESIGN_DESIGN_SCREEN,
         UserState.WAITING_DESIGN_GAME_SCREENS,
@@ -747,7 +748,6 @@ def send_to_admin_chat(user_id, content_data):
             # Отправляем медиагруппу БЕЗ reply_markup
             bot.send_media_group(target_chat, media)
 
-            # Добавляем кнопку к последнему сообщению в группе
             bot.send_message(
                 target_chat,
                 text=f"{user_info}\nХотите ответить?",
@@ -1083,7 +1083,7 @@ def handle_pocket_screens(message):
     # Сохраняем последний (наибольший) размер фото
     photo_data = {
         "file_id": message.photo[-1].file_id,
-        "unique_id": message.photo[-1].file_unique_id
+        "unique_id": message.photo[-1].file_unique_id,
     }
     data["photos"].append(photo_data)
     user_content_storage.update_data(user_id, data)
@@ -1111,7 +1111,7 @@ def handle_pocket_screens(message):
     # Сохраняем последний размер фото
     new_photo_data = {
         "file_id": message.photo[-1].file_id,
-        "unique_id": message.photo[-1].file_unique_id
+        "unique_id": message.photo[-1].file_unique_id,
     }
     data["photos"].append(new_photo_data)
 
@@ -1166,12 +1166,20 @@ def handle_design_screen(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
 
-    # Проверяем количество фото в сообщении
-    if len(message.photo) != 1:
-        bot.reply_to(message, "❌ Отправьте ровно 1 скриншот ОДНИМ сообщением!")
+    # Проверяем, что это не альбом
+    if message.media_group_id:
+        bot.reply_to(message, "❌ Отправьте одно фото!")
         return
 
-    data["design_screen"] = message.photo[-1].file_id
+    # Сохраняем последний (наибольший) размер фото
+    photo_data = {
+        "file_id": message.photo[-1].file_id,
+        "unique_id": message.photo[-1].file_unique_id,
+    }
+
+    data["design_screen"].append(photo_data)
+    user_content_storage.update_data(user_id, data)
+
     bot.set_state(user_id, UserState.WAITING_DESIGN_GAME_SCREENS)
     bot.send_message(
         message.chat.id, "🎮 Пришлите до 9 скриншотов с применением рисунка в игре:"
@@ -1187,12 +1195,69 @@ def handle_game_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
 
-    remaining = 9 - len(data.get("game_screens", []))
-    if len(message.photo) > remaining:
-        bot.reply_to(message, f"❌ Можно добавить еще {remaining} фото!")
-        return
+    try:
+        # Удаляем предыдущее сообщение с прогрессом
+        if data.get("progress_message_id"):
+            bot.delete_message(message.chat.id, data["progress_message_id"])
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
 
-    data["game_screens"].extend([p.file_id for p in message.photo])
+    # 1. Определяем оригинальное изображение (последний элемент всегда наибольший)
+    original_photo = message.photo[-1]
+    
+    # 2. Группируем все превью этого изображения по уникальному ID оригинала
+    unique_id = original_photo.file_unique_id
+    
+    # 3. Проверяем дубликаты
+    existing_ids = {p["unique_id"] for p in data.get("game_screens", [])}
+    if unique_id in existing_ids:
+        bot.reply_to(message, "❌ Это изображение уже было добавлено!")
+        return
+    
+    # 4. Проверяем лимит
+    if len(data.get("game_screens", [])) >= 9:
+        bot.reply_to(message, "❌ Достигнут максимум 9 скриншотов!")
+        return
+    
+    # 5. Сохраняем только оригинал
+    data.setdefault("game_screens", []).append({
+        "file_id": original_photo.file_id,
+        "unique_id": unique_id
+    })
+    
+    # 6. Обновляем хранилище
+    user_content_storage.update_data(user_id, data)
+
+    # Добавим графический индикатор
+    progress_bar = "🟩" * len(data["game_screens"]) + "⬜" * (9 - len(data["game_screens"]))
+    
+    # 7. Отправляем подтверждение
+    sent_msg = bot.reply_to(
+        message,
+        f"{progress_bar}\n"
+        f"✅ Скриншот добавлен! Всего: {len(data['game_screens'])}/9\n"
+        "Отправьте еще или нажмите /done"
+    )
+    # Сохраняем ID сообщения для последующего удаления
+    data["progress_message_id"] = sent_msg.message_id
+    user_content_storage.update_data(user_id, data)
+
+
+@bot.message_handler(
+    commands=["done"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    == UserState.WAITING_DESIGN_GAME_SCREENS,
+)
+def handle_done(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+    
+    try:
+        if data.get("progress_message_id"):
+            bot.delete_message(message.chat.id, data["progress_message_id"])
+    except Exception as e:
+        logger.warning(f"Ошибка удаления прогресса: {e}")
+
     send_to_news_chat(user_id)
 
 
@@ -1312,7 +1377,7 @@ def send_to_news_chat(user_id):
                 raise ValueError("Отсутствует скриншот дизайна")
 
             media = [
-                types.InputMediaPhoto(data["design_screen"]["file_id"], caption=text)
+                types.InputMediaPhoto(data["design_screen"][0]["file_id"], caption=text)
             ]
 
             # Игровые скриншоты
@@ -1321,30 +1386,21 @@ def send_to_news_chat(user_id):
                 if photo["unique_id"] not in seen_ids:
                     media.append(types.InputMediaPhoto(photo["file_id"]))
                     seen_ids.add(photo["unique_id"])
+                    if len(media) >= 10:  # Общий лимит медиагруппы
+                        break
 
         # Отправка контента
         try:
             if media:
                 logger.debug(f"Отправка медиагруппы из {len(media)} элементов")
-                sent_messages = bot.send_media_group(target_chat, media)
-
-                # Добавляем кнопку только если есть подпись
-                if any(m.caption for m in media):
-                    try:
-                        bot.edit_message_reply_markup(
-                            chat_id=target_chat,
-                            message_id=sent_messages[-1].message_id,
-                            reply_markup=markup,
-                        )
-                    except ApiTelegramException as e:
-                        logger.warning(f"Не удалось добавить кнопку: {e}")
-                        bot.send_message(
-                            target_chat, "💬 Ответить:", reply_markup=markup
-                        )
-                else:
-                    bot.send_message(target_chat, "💬 Ответить:", reply_markup=markup)
+                bot.send_media_group(target_chat, media)
+                bot.send_message(
+                    target_chat,
+                    text=f"{user_info}\nХотите ответить?",
+                    reply_markup=markup,
+                )
             else:
-                logger.warning("Нет медиа для отправки")
+                logger.debug("Нет медиа для отправки")
                 bot.send_message(target_chat, text, reply_markup=markup)
 
         except ApiTelegramException as e:
