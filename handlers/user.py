@@ -520,14 +520,16 @@ def handle_user_text(message):
         reply_markup=types.ForceReply(),
     )
 
+
 @bot.message_handler(
     commands=["skip"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_ADMIN_CONTENT_PHOTO,
+    func=lambda m: bot.get_state(m.from_user.id)
+    == UserState.WAITING_ADMIN_CONTENT_PHOTO,
 )
 def skip_news_description(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
-    send_to_admin_chat(user_id, content_data)
+    preview_to_admin_chat(user_id, content_data)
 
 
 @bot.message_handler(
@@ -549,12 +551,12 @@ def handle_user_content(message):
 
             content_data["photos"].append(photo_id)
             new_count = len(content_data["photos"])
-             # Удаляем предыдущее сообщение-счетчик если есть
+            # Удаляем предыдущее сообщение-счетчик если есть
             if content_data.get("counter_msg_id"):
                 try:
                     bot.delete_message(
                         chat_id=message.chat.id,
-                        message_id=content_data["counter_msg_id"]
+                        message_id=content_data["counter_msg_id"],
                     )
                 except Exception as delete_error:
                     logger.debug(f"Не удалось удалить сообщение: {delete_error}")
@@ -565,13 +567,13 @@ def handle_user_content(message):
                 f"📸 Принято скриншотов: {new_count}/10\n"
                 "Отправьте ещё фото или нажмите /done",
             )
-            
+
             # Обновляем ID последнего сообщения в хранилище
             content_data["counter_msg_id"] = msg.message_id
             user_content_storage.update_data(user_id, content_data)
 
             if new_count == 10:
-                send_to_admin_chat(user_id, content_data)
+                preview_to_admin_chat(user_id, content_data)
                 # Удаляем сообщение-счетчик
                 bot.delete_message(message.chat.id, content_data["counter_msg_id"])
 
@@ -597,12 +599,70 @@ def handle_done(message):
             bot.delete_message(message.chat.id, content_data["counter_msg_id"])
         except Exception as e:
             logger.debug(f"Ошибка удаления сообщения: {e}")
-    
-    send_to_admin_chat(user_id, content_data)
-    
+
+    preview_to_admin_chat(user_id, content_data)
+
     # Очищаем данные
     user_content_storage.clear(user_id)
 
+
+# Временное хранилище для данных перед отправкой
+temp_storage = {}
+
+
+def preview_to_admin_chat(user_id, content_data):
+    # Сохраняем данные во временное хранилище
+    temp_storage[user_id] = content_data
+
+    # Показываем предпросмотр
+    media = [types.InputMediaPhoto(pid) for pid in content_data["photos"]]
+    media[0].caption = f"Предпросмотр:\n{content_data["text"]}"
+    bot.send_media_group(user_id, media)
+
+    # Создаем клавиатуру
+    markup = types.InlineKeyboardMarkup()
+    markup.row(
+        types.InlineKeyboardButton(
+            "✅ Отправить", callback_data=f"confirm_send:{user_id}"
+        ),
+        types.InlineKeyboardButton(
+            "❌ Отменить", callback_data=f"cancel_send:{user_id}"
+        ),
+    )
+    bot.send_message(user_id, "Отправить сообщение админам?", reply_markup=markup)
+
+
+# Обработчик кнопок подтверждения
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('confirm_send', 'cancel_send')))
+def handle_confirmation(call):
+    try:
+        action, user_id = call.data.split(':')
+        user_id = int(user_id)
+        
+        # Удаляем сообщение с кнопками
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        
+        if action == "confirm_send":
+            # Получаем данные из хранилища
+            content_data = temp_storage.get(user_id)
+            
+            if content_data:
+                # Вызываем функцию отправки
+                send_to_admin_chat(user_id, content_data)
+                bot.answer_callback_query(call.id, "✅ Отправлено администраторам")
+            else:
+                bot.answer_callback_query(call.id, "❌ Данные устарели")
+                
+        elif action == "cancel_send":
+            bot.answer_callback_query(call.id, "❌ Отправка отменена")
+            
+    except Exception as e:
+        logger.error(f"Confirmation error: {e}")
+        
+    finally:
+        # Очищаем хранилище
+        if user_id in temp_storage:
+            del temp_storage[user_id]
 
 def send_to_admin_chat(user_id, content_data):
     try:
@@ -669,6 +729,10 @@ def send_to_admin_chat(user_id, content_data):
             "❌ Ошибка при отправке контента",
             reply_markup=Menu.back_user_only_main_menu(),
         )
+    finally:
+        # Очищаем хранилище
+        if user_id in temp_storage:
+            del temp_storage[user_id]
 
 
 @bot.message_handler(
@@ -676,6 +740,7 @@ def send_to_admin_chat(user_id, content_data):
     func=lambda message: bot.get_state(message.from_user.id)
     in [
         UserState.WAITING_ADMIN_CONTENT,
+        UserState.WAITING_ADMIN_CONTENT_PHOTO,
         UserState.WAITING_NEWS_SCREENSHOTS,
         UserState.WAITING_NEWS_DESCRIPTION,
         UserState.WAITING_NEWS_SPEAKER,
