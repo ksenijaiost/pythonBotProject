@@ -5,6 +5,10 @@ class AdminStates(StatesGroup):
     waiting_content = State()
     waiting_content_photo = State()
 
+class ContestStates(StatesGroup):
+    collecting_photos = State()
+    waiting_text = State()
+
 
 class NewsStates(StatesGroup):
     waiting_screenshots = State()
@@ -34,6 +38,7 @@ class DesignStates(StatesGroup):
 # Объединяем все состояния в одном пространстве имен
 class UserState:
     admin = AdminStates
+    contest = ContestStates
     news = NewsStates
     code = CodeStates
     pocket = PocketStates

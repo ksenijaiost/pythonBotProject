@@ -90,12 +90,6 @@ def lock_input(func):
     return wrapper
 
 
-class UserStates(StatesGroup):
-    idle = State()  # Состояние по умолчанию
-    waiting_photos = State()
-    waiting_description = State()
-
-
 # Декоратор для проверки состояния
 def check_state(*states):
     def decorator(func):
@@ -295,7 +289,8 @@ def start_contest_submission(call):
 @bot.message_handler(
     content_types=["photo"],
     func=lambda m: user_submissions.exists(m.from_user.id)
-    and user_submissions.get(m.from_user.id).status == "collecting_photos",
+    and user_submissions.get(m.from_user.id).status
+    == UserState.contest.collecting_photos,
 )
 @lock_input
 def handle_work_submission(message):
@@ -335,7 +330,7 @@ def handle_work_submission(message):
             return
 
         # Переходим к получению текста
-        submission.status = "waiting_text"
+        submission.status = UserState.contest.waiting_text
         bot.send_message(
             user_id,
             "📝 Теперь отправьте текст для работы (описание, название и т.д.):",
@@ -347,7 +342,7 @@ def handle_work_submission(message):
 
 def handle_group_completion(user_id):
     submission = user_submissions.get(user_id)
-    if not submission or submission.status != "collecting_photos":
+    if not submission or submission.status != UserState.contest.collecting_photos:
         return
 
     # Проверяем, что с момента последнего фото прошло достаточно времени
@@ -364,7 +359,7 @@ def handle_group_completion(user_id):
             return
 
         # Переход к запросу текста
-        submission.status = "waiting_text"
+        submission.status = UserState.contest.waiting_text
         bot.send_message(
             user_id,
             "📝 Теперь отправьте текст для работы:",
@@ -375,7 +370,7 @@ def handle_group_completion(user_id):
 @bot.message_handler(
     content_types=["text"],
     func=lambda m: user_submissions.exists(m.from_user.id)
-    and user_submissions.get(m.from_user.id).status == "waiting_text",
+    and user_submissions.get(m.from_user.id).status == UserState.contest.waiting_text,
 )
 @lock_input
 def handle_text(message):
@@ -388,7 +383,6 @@ def handle_text(message):
 
         # Показываем предпросмотр
         media = [types.InputMediaPhoto(pid) for pid in submission.photos]
-        media[0].caption = f"Предпросмотр:\n{submission.caption}"
         bot.send_media_group(user_id, media)
 
         # Создаем клавиатуру
@@ -410,7 +404,7 @@ def handle_text(message):
         # Отправляем вопрос
         bot.send_message(
             message.chat.id,
-            "Отправить работу во время проведения конкурса за Вас?",
+            f"Предпросмотр:\n{submission.caption}\n\nОтправить работу во время проведения конкурса за Вас?",
             reply_markup=markup,
         )
     except Exception as e:
