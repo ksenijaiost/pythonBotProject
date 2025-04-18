@@ -899,43 +899,81 @@ def handle_news_screenshots(message):
     data = user_content_storage.get_data(user_id)
 
     try:
-        # Инициализируем список фото, если его нет
-        if "photos" not in data:
-            data["photos"] = []
-
-        # Всегда берем фото максимального качества
-        largest_photo = max(message.photo, key=lambda p: p.file_size)
-
-        # Проверяем уникальность через file_unique_id
-        if not any(
-            p["unique_id"] == largest_photo.file_unique_id for p in data["photos"]
-        ):
-            data["photos"].append(
-                {
-                    "file_id": largest_photo.file_id,
-                    "unique_id": largest_photo.file_unique_id,
-                }
-            )
-
-        logger.debug(f"Текущее количество фото: {len(data['photos'])}")
-
-        # Проверка лимита
-        if len(data["photos"]) > 10:
-            raise ValueError("Можно отправить не более 10 фото")
-
-        # Запрашиваем описание только при первом добавлении фото
-        if not data.get("description_requested"):
-            bot.set_state(user_id, UserState.WAITING_NEWS_DESCRIPTION)
-            data["description_requested"] = True
-            bot.send_message(
-                message.chat.id, "📝 Напишите описание новости (или /skip):"
-            )
-
-    except ValueError as e:
-        bot.reply_to(message, f"❌ {str(e)}!")
+        # Удаляем предыдущее сообщение с прогрессом
+        if data.get("progress_message_id"):
+            bot.delete_message(message.chat.id, data["progress_message_id"])
     except Exception as e:
-        logger.error(f"Ошибка обработки фото: {str(e)}")
-        bot.reply_to(message, "⚠️ Произошла ошибка обработки фото")
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+
+    # 1. Определяем оригинальное изображение (последний элемент всегда наибольший)
+    original_photo = message.photo[-1]
+    
+    # 2. Группируем все превью этого изображения по уникальному ID оригинала
+    unique_id = original_photo.file_unique_id
+    
+    # 3. Проверяем дубликаты
+    existing_ids = {p["unique_id"] for p in data.get("photos", [])}
+    if unique_id in existing_ids:
+        bot.reply_to(message, "❌ Это изображение уже было добавлено!")
+        return
+    
+    # 4. Проверяем лимит
+    if len(data.get("photos", [])) > 10:
+        bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов!")
+        request_description(user_id)
+    
+    # 5. Сохраняем только оригинал
+    data.setdefault("photos", []).append({
+        "file_id": original_photo.file_id,
+        "unique_id": unique_id
+    })
+    
+    # 6. Обновляем хранилище
+    user_content_storage.update_data(user_id, data)
+
+    if len(data["photos"]) == 10:
+        request_description(user_id)
+    else:
+        # Добавим графический индикатор
+        progress_bar = "🟪" * len(data["photos"]) + "⬜" * (10 - len(data["photos"]))
+        
+        # 7. Отправляем подтверждение
+        sent_msg = bot.reply_to(
+            message,
+            f"{progress_bar}\n"
+            f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
+            "Отправьте еще или нажмите /done"
+        )
+        # Сохраняем ID сообщения для последующего удаления
+        data["progress_message_id"] = sent_msg.message_id
+        user_content_storage.update_data(user_id, data)
+
+
+def request_description(user_id):
+    bot.set_state(user_id, UserState.WAITING_NEWS_DESCRIPTION)
+    bot.send_message(user_id, "📝 Напишите описание новости (или /skip):")
+
+
+@bot.message_handler(
+    commands=["done"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SCREENSHOTS,
+)
+def handle_done_news_photos(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    # Удаляем сообщение прогресса
+    if data.get("progress_msg_id"):
+        try:
+            bot.delete_message(message.chat.id, data["progress_msg_id"])
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
+            
+    if len(data.get("photos", [])) == 0:
+        bot.reply_to(message, "❌ Вы не отправили ни одного фото!")
+        return
+
+    request_description(user_id)
 
 
 @bot.message_handler(
@@ -1010,37 +1048,81 @@ def handle_code_screenshots(message):
     data = user_content_storage.get_data(user_id)
 
     try:
-        # Всегда берем фото максимального качества
-        largest_photo = max(message.photo, key=lambda p: p.file_size)
-
-        # Проверяем уникальность через file_unique_id
-        if not any(
-            p["unique_id"] == largest_photo.file_unique_id for p in data["photos"]
-        ):
-            data["photos"].append(
-                {
-                    "file_id": largest_photo.file_id,
-                    "unique_id": largest_photo.file_unique_id,
-                }
-            )
-            logger.debug(f"Добавлено фото. Текущее количество: {len(data['photos'])}")
-
-        logger.debug(f"Всего прислано {len(data['photos'])} фото.")
-
-        # Проверка лимита
-        if len(data["photos"]) > 10:
-            bot.reply_to(message, "❌ Максимум 10 фото!")
-            return
-
-        # Запрашиваем имя спикера только при первом добавлении
-        if not data.get("speaker_requested"):
-            data["speaker_requested"] = True
-            bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
-            bot.send_message(message.chat.id, "👤 Введите имя спикера:")
-
+        # Удаляем предыдущее сообщение с прогрессом
+        if data.get("progress_message_id"):
+            bot.delete_message(message.chat.id, data["progress_message_id"])
     except Exception as e:
-        logger.error(f"Ошибка обработки фото: {str(e)}")
-        bot.reply_to(message, "⚠️ Произошла ошибка обработки фото")
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+
+    # 1. Определяем оригинальное изображение (последний элемент всегда наибольший)
+    original_photo = message.photo[-1]
+    
+    # 2. Группируем все превью этого изображения по уникальному ID оригинала
+    unique_id = original_photo.file_unique_id
+    
+    # 3. Проверяем дубликаты
+    existing_ids = {p["unique_id"] for p in data.get("photos", [])}
+    if unique_id in existing_ids:
+        bot.reply_to(message, "❌ Это изображение уже было добавлено!")
+        return
+    
+    # 4. Проверяем лимит
+    if len(data.get("photos", [])) > 10:
+        bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов!")
+        request_speaker(user_id)
+    
+    # 5. Сохраняем только оригинал
+    data.setdefault("photos", []).append({
+        "file_id": original_photo.file_id,
+        "unique_id": unique_id
+    })
+    
+    # 6. Обновляем хранилище
+    user_content_storage.update_data(user_id, data)
+
+    if len(data["photos"]) == 10:
+        request_speaker(user_id)
+    else:
+        # Добавим графический индикатор
+        progress_bar = "🟪" * len(data["photos"]) + "⬜" * (10 - len(data["photos"]))
+        
+        # 7. Отправляем подтверждение
+        sent_msg = bot.reply_to(
+            message,
+            f"{progress_bar}\n"
+            f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
+            "Отправьте еще или нажмите /done"
+        )
+        # Сохраняем ID сообщения для последующего удаления
+        data["progress_message_id"] = sent_msg.message_id
+        user_content_storage.update_data(user_id, data)
+
+
+def request_speaker(user_id):
+    bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
+    bot.send_message(user_id, "👤 Введите имя спикера:")
+
+
+@bot.message_handler(
+    commands=["done"],
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SCREENSHOTS,
+)
+def handle_done_news_photos(message):
+    user_id = message.from_user.id
+    data = user_content_storage.get_data(user_id)
+
+    # Удаляем сообщение прогресса
+    if data.get("progress_msg_id"):
+        try:
+            bot.delete_message(message.chat.id, data["progress_msg_id"])
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
+            
+    if len(data.get("photos", [])) == 0:
+        bot.reply_to(message, "❌ Вы не отправили ни одного фото!")
+        return
+
+    request_speaker(user_id)
 
 
 @bot.message_handler(
@@ -1177,7 +1259,7 @@ def handle_design_screen(message):
 
     bot.set_state(user_id, UserState.WAITING_DESIGN_GAME_SCREENS)
     bot.send_message(
-        message.chat.id, "🎮 Пришлите до 9 скриншотов с применением рисунка в игре:"
+        message.chat.id, "🎮 Пришлите до 9 (НЕ 10) скриншотов с применением рисунка в игре:"
     )
 
 
@@ -1223,7 +1305,7 @@ def handle_game_screens(message):
     user_content_storage.update_data(user_id, data)
 
     # Добавим графический индикатор
-    progress_bar = "🟩" * len(data["game_screens"]) + "⬜" * (
+    progress_bar = "🟪" * len(data["game_screens"]) + "⬜" * (
         9 - len(data["game_screens"])
     )
 
@@ -1310,9 +1392,8 @@ def preview_send_to_news_chat(user_id):
                     seen_ids.add(photo["unique_id"])
                     unique_photos.append(photo)
 
-            media = [
-                types.InputMediaPhoto(photo["file_id"]) for photo in unique_photos[:10]
-            ]
+            # Формируем медиагруппу
+            media = [types.InputMediaPhoto(p["file_id"]) for p in unique_photos[:10]]
 
         elif data["type"] == "code":
             text = f"{ButtonText.USER_NEWS_CODE}\n"
@@ -1329,15 +1410,7 @@ def preview_send_to_news_chat(user_id):
                     unique_photos.append(photo)
 
             # Формируем медиагруппу
-            media = []
-            for i, file_id in enumerate(unique_photos[:10]):
-                media.append(
-                    types.InputMediaPhoto(
-                        media=photo["file_id"]
-                    )
-                )
-                if i >= 9:  # Лимит 10 фото
-                    break
+            media = [types.InputMediaPhoto(p["file_id"]) for p in unique_photos[:10]]
 
         elif data["type"] == "pocket":
             text = f"{ButtonText.USER_NEWS_POCKET}"
@@ -1366,9 +1439,7 @@ def preview_send_to_news_chat(user_id):
             if not data.get("design_screen"):
                 raise ValueError("Отсутствует скриншот дизайна")
 
-            media = [
-                types.InputMediaPhoto(data["design_screen"][0]["file_id"])
-            ]
+            media = [types.InputMediaPhoto(data["design_screen"][0]["file_id"])]
 
             # Игровые скриншоты
             seen_ids = set()
