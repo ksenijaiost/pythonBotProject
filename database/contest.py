@@ -370,12 +370,10 @@ class UserContentStorage:
         self.data[user_id] = {
             "type": "news",
             "photos": [],
-            "processed": False,
             "description": None,
             "speaker": None,
             "island": None,
-            "description_requested": False,
-            "unique_ids": set(),
+            "progress_message_id": None
         }
 
     def init_code(self, user_id):
@@ -385,6 +383,7 @@ class UserContentStorage:
             "photos": [],
             "speaker": None,
             "island": None,
+            "progress_message_id": None
         }
 
     def init_pocket(self, user_id):
