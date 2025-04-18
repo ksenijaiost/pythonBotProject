@@ -1,11 +1,12 @@
 from datetime import datetime
 import logging
 import threading
+from threading import Lock
 import re
-from telebot.apihelper import ApiTelegramException
 from collections import defaultdict
 from venv import logger
 from telebot import types
+from telebot.handler_backends import State, StatesGroup
 import time
 from database.contest import (
     ContestManager,
@@ -23,9 +24,10 @@ from handlers.envParams import (
     CONTEST_CHAT_ID,
     CHAT_USERNAME,
 )
+from handlers.states import UserState
 from menu.links import Links
 from menu.menu import Menu
-from menu.constants import ButtonCallback, ButtonText, ConstantLinks, UserState
+from menu.constants import ButtonCallback, ButtonText, ConstantLinks
 
 
 from threading import Lock
@@ -48,6 +50,65 @@ def is_user_in_chat(user_id):
         logger = logging.getLogger(__name__)
         logger.error(f"Ошибка проверки участника чата: {e}")
         return False
+
+
+# Система блокировки ввода
+class UserLock:
+    def __init__(self):
+        self.locks = {}
+        self.global_lock = Lock()
+
+    def acquire(self, user_id):
+        with self.global_lock:
+            if user_id not in self.locks:
+                self.locks[user_id] = Lock()
+            return self.locks[user_id].acquire(blocking=False)
+
+    def release(self, user_id):
+        with self.global_lock:
+            if user_id in self.locks:
+                self.locks[user_id].release()
+
+
+user_locks = UserLock()
+
+
+# Декоратор для обработчиков
+def lock_input(func):
+    def wrapper(message):
+        user_id = message.from_user.id
+        if not user_locks.acquire(user_id):
+            bot.reply_to(
+                message, "⏳ Пожалуйста, дождитесь завершения предыдущей операции!"
+            )
+            return
+        try:
+            return func(message)
+        finally:
+            user_locks.release(user_id)
+
+    return wrapper
+
+
+class UserStates(StatesGroup):
+    idle = State()  # Состояние по умолчанию
+    waiting_photos = State()
+    waiting_description = State()
+
+
+# Декоратор для проверки состояния
+def check_state(*states):
+    def decorator(func):
+        def wrapper(message):
+            current_state = bot.get_state(message.from_user.id)
+            if current_state not in states:
+                bot.reply_to(message, "❌ Это действие сейчас недоступно")
+                return
+            return func(message)
+
+        return wrapper
+
+    return decorator
 
 
 # ГАЙДЫ
@@ -236,6 +297,7 @@ def start_contest_submission(call):
     func=lambda m: user_submissions.exists(m.from_user.id)
     and user_submissions.get(m.from_user.id).status == "collecting_photos",
 )
+@lock_input
 def handle_work_submission(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
@@ -315,6 +377,7 @@ def handle_group_completion(user_id):
     func=lambda m: user_submissions.exists(m.from_user.id)
     and user_submissions.get(m.from_user.id).status == "waiting_text",
 )
+@lock_input
 def handle_text(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
@@ -356,6 +419,7 @@ def handle_text(message):
 
 # Обработчик ответов
 @bot.callback_query_handler(func=lambda call: call.data.startswith("send_by_bot_"))
+@lock_input
 def handle_send_method(call):
     user_id = call.from_user.id
     if not user_submissions.exists(user_id):
@@ -409,6 +473,7 @@ def handle_send_method(call):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "cancel_submission")
+@lock_input
 def handle_cancel_submission(call):
     user_id = call.from_user.id
     try:
@@ -482,26 +547,26 @@ def handle_user_turnip(call):
     )
 
 
-# Общий обработчик отвмены для сообщения админам и новостей
+# Общий обработчик отмены для сообщения админам и новостей
 @bot.message_handler(
     commands=["cancel"],
     func=lambda message: bot.get_state(message.from_user.id)
     in [
-        UserState.WAITING_ADMIN_CONTENT,
-        UserState.WAITING_ADMIN_CONTENT_PHOTO,
-        UserState.WAITING_NEWS_SCREENSHOTS,
-        UserState.WAITING_NEWS_DESCRIPTION,
-        UserState.WAITING_NEWS_SPEAKER,
-        UserState.WAITING_NEWS_ISLAND,
-        UserState.WAITING_CODE_VALUE,
-        UserState.WAITING_CODE_SCREENSHOTS,
-        UserState.WAITING_CODE_SPEAKER,
-        UserState.WAITING_CODE_ISLAND,
-        UserState.WAITING_POCKET_SCREEN_1,
-        UserState.WAITING_POCKET_SCREEN_2,
-        UserState.WAITING_DESIGN_CODE,
-        UserState.WAITING_DESIGN_DESIGN_SCREEN,
-        UserState.WAITING_DESIGN_GAME_SCREENS,
+        UserState.admin.waiting_content,
+        UserState.admin.waiting_content_photo,
+        UserState.news.waiting_screenshots,
+        UserState.news.waiting_description,
+        UserState.news.waiting_speaker,
+        UserState.news.waiting_island,
+        UserState.code.waiting_value,
+        UserState.code.waiting_screenshots,
+        UserState.code.waiting_speaker,
+        UserState.code.waiting_island,
+        UserState.pocket.waiting_screen_1,
+        UserState.pocket.waiting_screen_2,
+        UserState.design.waiting_code,
+        UserState.design.waiting_design_screen,
+        UserState.design.waiting_game_screens,
     ],
 )
 def handle_cancel(message):
@@ -515,6 +580,38 @@ def handle_cancel(message):
     )
     if user_id in temp_storage:
         del temp_storage[user_id]
+    if user_id in temp_storage_news:
+        del temp_storage_news[user_id]
+
+
+# Общий обработчик неверного контента для сообщения админам и новостей
+@bot.message_handler(
+    func=lambda m: bot.get_state(m.from_user.id)
+    in [
+        UserState.admin.waiting_content,
+        UserState.admin.waiting_content_photo,
+        UserState.news.waiting_screenshots,
+        UserState.news.waiting_description,
+        UserState.news.waiting_speaker,
+        UserState.news.waiting_island,
+        UserState.code.waiting_value,
+        UserState.code.waiting_screenshots,
+        UserState.code.waiting_speaker,
+        UserState.code.waiting_island,
+        UserState.pocket.waiting_screen_1,
+        UserState.pocket.waiting_screen_2,
+        UserState.design.waiting_code,
+        UserState.design.waiting_design_screen,
+        UserState.design.waiting_game_screens,
+    ]
+    and m.content_type != "photo"
+)
+@lock_input
+def handle_invalid_content(message):
+    bot.send_message(
+        message.chat.id,
+        "❌ Пожалуйста, отправьте фото\n ❌ Для отмены используйте /cancel",
+    )
 
 
 # СООБЩЕНИЕ АДМИНАМ
@@ -527,7 +624,7 @@ def handle_user_to_admin(call):
 
     bot.set_state(
         user_id,
-        UserState.WAITING_ADMIN_CONTENT,
+        UserState.admin.waiting_content,
     )
 
     bot.send_message(
@@ -541,10 +638,11 @@ def handle_user_to_admin(call):
 @bot.message_handler(
     content_types=["text"],
     func=lambda message: (
-        bot.get_state(message.from_user.id) == UserState.WAITING_ADMIN_CONTENT
+        bot.get_state(message.from_user.id) == UserState.admin.waiting_content
         and not message.text.startswith("/")
     ),
 )
+@lock_input
 def handle_user_text(message):
     if message.text.startswith("/"):
         bot.send_message(message.chat.id, "⚠️ Используйте /cancel для отмены")
@@ -552,7 +650,7 @@ def handle_user_text(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
     content_data["text"] = message.text
-    bot.set_state(user_id, UserState.WAITING_ADMIN_CONTENT_PHOTO)
+    bot.set_state(user_id, UserState.admin.waiting_content_photo)
     bot.send_message(
         message.chat.id,
         "Теперь можете прислать фото.\nЕсли их нет, нажмите /skip",
@@ -563,8 +661,9 @@ def handle_user_text(message):
 @bot.message_handler(
     commands=["skip"],
     func=lambda m: bot.get_state(m.from_user.id)
-    == UserState.WAITING_ADMIN_CONTENT_PHOTO,
+    == UserState.admin.waiting_content_photo,
 )
+@lock_input
 def skip_news_description(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
@@ -574,8 +673,9 @@ def skip_news_description(message):
 @bot.message_handler(
     content_types=["photo"],
     func=lambda message: bot.get_state(message.from_user.id)
-    in [UserState.WAITING_ADMIN_CONTENT_PHOTO],
+    == UserState.admin.waiting_content_photo,
 )
+@lock_input
 def handle_user_content(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
@@ -627,8 +727,9 @@ def handle_user_content(message):
 @bot.message_handler(
     commands=["done"],
     func=lambda message: bot.get_state(message.from_user.id)
-    in [UserState.WAITING_ADMIN_CONTENT_PHOTO],
+    == UserState.admin.waiting_content_photo,
 )
+@lock_input
 def handle_done(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id)
@@ -655,7 +756,7 @@ def preview_to_admin_chat(user_id, content_data):
 
     # Показываем предпросмотр
     media = [types.InputMediaPhoto(pid) for pid in content_data["photos"]]
-    media[0].caption = f"Предпросмотр:\n{content_data["text"]}"
+
     bot.send_media_group(user_id, media)
 
     # Создаем клавиатуру
@@ -668,13 +769,18 @@ def preview_to_admin_chat(user_id, content_data):
             "❌ Отменить", callback_data=f"cancel_send:{user_id}"
         ),
     )
-    bot.send_message(user_id, "Отправить сообщение админам?", reply_markup=markup)
+    bot.send_message(
+        user_id,
+        f"Предпросмотр:\n{content_data["text"]}\n\nОтправить сообщение админам?",
+        reply_markup=markup,
+    )
 
 
 # Обработчик кнопок подтверждения
 @bot.callback_query_handler(
     func=lambda call: call.data.startswith(("confirm_send", "cancel_send"))
 )
+@lock_input
 def handle_confirmation(call):
     try:
         action, user_id = call.data.split(":")
@@ -805,7 +911,7 @@ def handle_user_to_news(call):
 def handle_user_news_news(call):
     user_id = call.from_user.id
     user_content_storage.init_news(user_id)
-    bot.set_state(user_id, UserState.WAITING_NEWS_SCREENSHOTS)
+    bot.set_state(user_id, UserState.news.waiting_screenshots)
     # Сначала редактируем сообщение БЕЗ ForceReply
     bot.edit_message_text(
         text="📸 Пришлите до 10 скриншотов для новости (отправьте все одним сообщением).",
@@ -827,7 +933,7 @@ def handle_user_news_news(call):
 def handle_news_code(call):
     user_id = call.from_user.id
     user_content_storage.init_code(user_id)
-    bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
+    bot.set_state(user_id, UserState.code.waiting_value)
     bot.edit_message_text(
         text="🔢 Пришлите код\nФормат (важен!): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 ваши цифры)",
         chat_id=call.message.chat.id,
@@ -846,7 +952,7 @@ def handle_news_code(call):
 def handle_news_pocket(call):
     user_id = call.from_user.id
     user_content_storage.init_pocket(user_id)
-    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_1)
+    bot.set_state(user_id, UserState.pocket.waiting_screen_1)
     bot.edit_message_text(
         text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы - лицевую и обратную стороны.\n"
         'Лучше всего это сделать через кнопку "SAVE"!\n'
@@ -867,7 +973,7 @@ def handle_news_pocket(call):
 def handle_news_design(call):
     user_id = call.from_user.id
     user_content_storage.init_design(user_id)
-    bot.set_state(user_id, UserState.WAITING_DESIGN_CODE)
+    bot.set_state(user_id, UserState.design.waiting_code)
     bot.edit_message_text(
         text="🎨 Введите код дизайна в формате:\n`MA-0000-0000-0000`",
         chat_id=call.message.chat.id,
@@ -892,8 +998,9 @@ def parse_speaker_info(text):
 # Обработчики для USER_NEWS_NEWS
 @bot.message_handler(
     content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SCREENSHOTS,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.news.waiting_screenshots,
 )
+@lock_input
 def handle_news_screenshots(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -907,27 +1014,26 @@ def handle_news_screenshots(message):
 
     # 1. Определяем оригинальное изображение (последний элемент всегда наибольший)
     original_photo = message.photo[-1]
-    
+
     # 2. Группируем все превью этого изображения по уникальному ID оригинала
     unique_id = original_photo.file_unique_id
-    
+
     # 3. Проверяем дубликаты
     existing_ids = {p["unique_id"] for p in data.get("photos", [])}
     if unique_id in existing_ids:
         bot.reply_to(message, "❌ Это изображение уже было добавлено!")
         return
-    
+
     # 4. Проверяем лимит
     if len(data.get("photos", [])) > 10:
         bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов!")
         request_description(user_id)
-    
+
     # 5. Сохраняем только оригинал
-    data.setdefault("photos", []).append({
-        "file_id": original_photo.file_id,
-        "unique_id": unique_id
-    })
-    
+    data.setdefault("photos", []).append(
+        {"file_id": original_photo.file_id, "unique_id": unique_id}
+    )
+
     # 6. Обновляем хранилище
     user_content_storage.update_data(user_id, data)
 
@@ -936,13 +1042,13 @@ def handle_news_screenshots(message):
     else:
         # Добавим графический индикатор
         progress_bar = "🟪" * len(data["photos"]) + "⬜" * (10 - len(data["photos"]))
-        
+
         # 7. Отправляем подтверждение
         sent_msg = bot.reply_to(
             message,
             f"{progress_bar}\n"
             f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
-            "Отправьте еще или нажмите /done"
+            "Отправьте еще или нажмите /done",
         )
         # Сохраняем ID сообщения для последующего удаления
         data["progress_message_id"] = sent_msg.message_id
@@ -950,14 +1056,15 @@ def handle_news_screenshots(message):
 
 
 def request_description(user_id):
-    bot.set_state(user_id, UserState.WAITING_NEWS_DESCRIPTION)
+    bot.set_state(user_id, UserState.news.waiting_description)
     bot.send_message(user_id, "📝 Напишите описание новости (или /skip):")
 
 
 @bot.message_handler(
     commands=["done"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SCREENSHOTS,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.news.waiting_description,
 )
+@lock_input
 def handle_done_news_photos(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -968,7 +1075,7 @@ def handle_done_news_photos(message):
             bot.delete_message(message.chat.id, data["progress_msg_id"])
         except Exception as e:
             logger.warning(f"Не удалось удалить сообщение: {e}")
-            
+
     if len(data.get("photos", [])) == 0:
         bot.reply_to(message, "❌ Вы не отправили ни одного фото!")
         return
@@ -978,42 +1085,45 @@ def handle_done_news_photos(message):
 
 @bot.message_handler(
     commands=["skip"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_DESCRIPTION,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.news.waiting_description,
 )
+@lock_input
 def skip_news_description(message):
     user_id = message.from_user.id
-    bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
+    bot.set_state(user_id, UserState.news.waiting_speaker)
     bot.send_message(message.chat.id, "👤 Введите имя спикера:")
 
 
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_DESCRIPTION,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.news.waiting_description,
 )
 def handle_news_description(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
     data["description"] = message.text
-    bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
+    bot.set_state(user_id, UserState.news.waiting_speaker)
     bot.send_message(message.chat.id, "👤 Введите имя спикера:")
 
 
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SPEAKER,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.news.waiting_speaker,
 )
+@lock_input
 def handle_news_speaker(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
     data["speaker"] = message.text
-    bot.set_state(user_id, UserState.WAITING_NEWS_ISLAND)
+    bot.set_state(user_id, UserState.news.waiting_island)
     bot.send_message(message.chat.id, "🏝️ Введите название острова:")
 
 
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_ISLAND,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.news.waiting_island,
 )
+@lock_input
 def handle_news_island(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1024,8 +1134,9 @@ def handle_news_island(message):
 # Обработчики для USER_NEWS_CODE
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_VALUE,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.code.waiting_value,
 )
+@lock_input
 def handle_code_value(message):
     user_id = message.from_user.id
     code = message.text.upper()
@@ -1035,14 +1146,15 @@ def handle_code_value(message):
         return
 
     user_content_storage.get_data(user_id)["code"] = code
-    bot.set_state(user_id, UserState.WAITING_CODE_SCREENSHOTS)
+    bot.set_state(user_id, UserState.code.waiting_screenshots)
     bot.send_message(message.chat.id, "📸 Пришлите до 10 скриншотов:")
 
 
 @bot.message_handler(
     content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SCREENSHOTS,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.code.waiting_screenshots,
 )
+@lock_input
 def handle_code_screenshots(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1056,27 +1168,26 @@ def handle_code_screenshots(message):
 
     # 1. Определяем оригинальное изображение (последний элемент всегда наибольший)
     original_photo = message.photo[-1]
-    
+
     # 2. Группируем все превью этого изображения по уникальному ID оригинала
     unique_id = original_photo.file_unique_id
-    
+
     # 3. Проверяем дубликаты
     existing_ids = {p["unique_id"] for p in data.get("photos", [])}
     if unique_id in existing_ids:
         bot.reply_to(message, "❌ Это изображение уже было добавлено!")
         return
-    
+
     # 4. Проверяем лимит
     if len(data.get("photos", [])) > 10:
         bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов!")
         request_speaker(user_id)
-    
+
     # 5. Сохраняем только оригинал
-    data.setdefault("photos", []).append({
-        "file_id": original_photo.file_id,
-        "unique_id": unique_id
-    })
-    
+    data.setdefault("photos", []).append(
+        {"file_id": original_photo.file_id, "unique_id": unique_id}
+    )
+
     # 6. Обновляем хранилище
     user_content_storage.update_data(user_id, data)
 
@@ -1085,13 +1196,13 @@ def handle_code_screenshots(message):
     else:
         # Добавим графический индикатор
         progress_bar = "🟪" * len(data["photos"]) + "⬜" * (10 - len(data["photos"]))
-        
+
         # 7. Отправляем подтверждение
         sent_msg = bot.reply_to(
             message,
             f"{progress_bar}\n"
             f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
-            "Отправьте еще или нажмите /done"
+            "Отправьте еще или нажмите /done",
         )
         # Сохраняем ID сообщения для последующего удаления
         data["progress_message_id"] = sent_msg.message_id
@@ -1099,14 +1210,15 @@ def handle_code_screenshots(message):
 
 
 def request_speaker(user_id):
-    bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
+    bot.set_state(user_id, UserState.code.waiting_speaker)
     bot.send_message(user_id, "👤 Введите имя спикера:")
 
 
 @bot.message_handler(
     commands=["done"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SCREENSHOTS,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.code.waiting_screenshots,
 )
+@lock_input
 def handle_done_news_photos(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1117,7 +1229,7 @@ def handle_done_news_photos(message):
             bot.delete_message(message.chat.id, data["progress_msg_id"])
         except Exception as e:
             logger.warning(f"Не удалось удалить сообщение: {e}")
-            
+
     if len(data.get("photos", [])) == 0:
         bot.reply_to(message, "❌ Вы не отправили ни одного фото!")
         return
@@ -1127,20 +1239,22 @@ def handle_done_news_photos(message):
 
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SPEAKER,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.code.waiting_speaker,
 )
+@lock_input
 def handle_code_speaker(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
     data["speaker"] = message.text
-    bot.set_state(user_id, UserState.WAITING_CODE_ISLAND)
+    bot.set_state(user_id, UserState.code.waiting_island)
     bot.send_message(message.chat.id, "🏝️ Введите название острова:")
 
 
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_ISLAND,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.code.waiting_island,
 )
+@lock_input
 def handle_code_island(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1151,8 +1265,9 @@ def handle_code_island(message):
 # Обработчики для USER_NEWS_POCKET
 @bot.message_handler(
     content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN_1,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.pocket.waiting_screen_1,
 )
+@lock_input
 def handle_pocket_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1166,7 +1281,7 @@ def handle_pocket_screens(message):
     user_content_storage.update_data(user_id, data)
 
     # Меняем состояние на ожидание второго фото
-    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_2)
+    bot.set_state(user_id, UserState.pocket.waiting_screen_2)
 
     bot.send_message(
         message.chat.id,
@@ -1179,8 +1294,9 @@ def handle_pocket_screens(message):
 
 @bot.message_handler(
     content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN_2,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.pocket.waiting_screen_2,
 )
+@lock_input
 def handle_pocket_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1203,24 +1319,12 @@ def handle_pocket_screens(message):
     preview_send_to_news_chat(user_id)
 
 
-# Обработчик неверного контента
-@bot.message_handler(
-    func=lambda m: bot.get_state(m.from_user.id)
-    in [UserState.WAITING_POCKET_SCREEN_1, UserState.WAITING_POCKET_SCREEN_2]
-    and m.content_type != "photo"
-)
-def handle_invalid_content(message):
-    bot.send_message(
-        message.chat.id,
-        "❌ Пожалуйста, отправьте фото\n ❌ Для отмены используйте /cancel",
-    )
-
-
 # Обработчики для USER_NEWS_DESIGN
 @bot.message_handler(
     content_types=["text"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_DESIGN_CODE,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.design.waiting_code,
 )
+@lock_input
 def handle_design_code(message):
     user_id = message.from_user.id
     code = message.text.upper()
@@ -1230,15 +1334,16 @@ def handle_design_code(message):
         return
 
     user_content_storage.get_data(user_id)["code"] = code
-    bot.set_state(user_id, UserState.WAITING_DESIGN_DESIGN_SCREEN)
+    bot.set_state(user_id, UserState.design.waiting_design_screen)
     bot.send_message(message.chat.id, "📸 Пришлите скриншот из приложения дизайнера:")
 
 
 @bot.message_handler(
     content_types=["photo"],
     func=lambda m: bot.get_state(m.from_user.id)
-    == UserState.WAITING_DESIGN_DESIGN_SCREEN,
+    == UserState.design.waiting_design_screen,
 )
+@lock_input
 def handle_design_screen(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1257,17 +1362,19 @@ def handle_design_screen(message):
     data["design_screen"].append(photo_data)
     user_content_storage.update_data(user_id, data)
 
-    bot.set_state(user_id, UserState.WAITING_DESIGN_GAME_SCREENS)
+    bot.set_state(user_id, UserState.design.waiting_game_screens)
     bot.send_message(
-        message.chat.id, "🎮 Пришлите до 9 (НЕ 10) скриншотов с применением рисунка в игре:"
+        message.chat.id,
+        "🎮 Пришлите до 9 (НЕ 10) скриншотов с применением рисунка в игре:",
     )
 
 
 @bot.message_handler(
     content_types=["photo"],
     func=lambda m: bot.get_state(m.from_user.id)
-    == UserState.WAITING_DESIGN_GAME_SCREENS,
+    == UserState.design.waiting_game_screens,
 )
+@lock_input
 def handle_game_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1324,8 +1431,9 @@ def handle_game_screens(message):
 @bot.message_handler(
     commands=["done"],
     func=lambda message: bot.get_state(message.from_user.id)
-    == UserState.WAITING_DESIGN_GAME_SCREENS,
+    == UserState.design.waiting_game_screens,
 )
+@lock_input
 def handle_done(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id)
@@ -1489,6 +1597,7 @@ def preview_send_to_news_chat(user_id):
 @bot.callback_query_handler(
     func=lambda call: call.data.startswith(("news_confirm_", "news_cancel_"))
 )
+@lock_input
 def handle_preview_actions_send_to_news_chat(call):
     user_id = call.from_user.id
     action, target_user_id = call.data.split("_")[-2:]
