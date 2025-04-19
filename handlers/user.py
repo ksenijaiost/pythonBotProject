@@ -41,6 +41,7 @@ media_groups = defaultdict(list)
 # Временное хранилище для данных
 temp_storage = {}
 
+
 def is_user_in_chat(user_id):
     try:
         chat_member = bot.get_chat_member(CHAT_ID, user_id)
@@ -54,8 +55,10 @@ def is_user_in_chat(user_id):
 # Система блокировки ввода
 class UserLock:
     def __init__(self):
-        self.locks = defaultdict(Lock) # Базовые блокировки по user_id
-        self.media_group_locks = defaultdict(Lock)  # Отдельные блокировки для медиагрупп
+        self.locks = defaultdict(Lock)  # Базовые блокировки по user_id
+        self.media_group_locks = defaultdict(
+            Lock
+        )  # Отдельные блокировки для медиагрупп
         self.current_media_groups = {}  # Текущие обрабатываемые медиагруппы
         self.global_lock = Lock()
         self.last_activity = {}  # Добавляем недостающий атрибут
@@ -110,6 +113,7 @@ user_locks = UserLock()
 
 def lock_input(allow_media_groups: bool = False):
     """Декоратор с поддержкой медиагрупп"""
+
     def decorator(func):
         def wrapper(message_or_call):
             user_id = message_or_call.from_user.id
@@ -121,8 +125,10 @@ def lock_input(allow_media_groups: bool = False):
                     return
             else:
                 if not user_locks.acquire(user_id):
-                    error_msg = "⏳ Пожалуйста, дождитесь завершения предыдущей операции!"
-                    if hasattr(message_or_call, 'message'):
+                    error_msg = (
+                        "⏳ Пожалуйста, дождитесь завершения предыдущей операции!"
+                    )
+                    if hasattr(message_or_call, "message"):
                         bot.answer_callback_query(message_or_call.id, error_msg)
                     else:
                         bot.reply_to(message_or_call, error_msg)
@@ -135,7 +141,9 @@ def lock_input(allow_media_groups: bool = False):
                     user_locks.release_media_group(user_id, media_group_id)
                 else:
                     user_locks.release(user_id)
+
         return wrapper
+
     return decorator
 
 
@@ -217,6 +225,8 @@ def handle_user_contest_info(call):
         # Получаем данные о текущем конкурсе
         contest = ContestManager.get_current_contest()
 
+        text = ""
+
         if not contest:
             # Если конкурсов нет в базе
             text = (
@@ -227,12 +237,7 @@ def handle_user_contest_info(call):
             current_date = datetime.now().date()
             end_date_obj = datetime.strptime(contest[4], "%d.%m.%Y").date()
 
-            if end_date_obj < current_date:
-                text += (
-                    "\n\n❗️ *Приём работ на конкурс завершён! Следите за обновлениями!*"
-                )
-
-            # Парсим данные из базы
+            # Основной текст сообщения
             theme = contest[1]
             description = contest[2]
             contest_date = datetime.strptime(contest[3], "%d.%m.%Y").strftime(
@@ -242,7 +247,6 @@ def handle_user_contest_info(call):
                 "%d %B %Y"
             )
 
-            # Форматируем сообщение
             text = (
                 f"🏆 *Актуальный конкурс!*\n\n"
                 f"📌 *Тема:* {theme}\n"
@@ -252,6 +256,12 @@ def handle_user_contest_info(call):
                 f"➡️ Приём работ до: {end_date_of_admission}\n\n"
                 f"Можете ознакомиться с правилами участия (и списком предыдущих конкурсов) по ссылке:"
             )
+
+            # Добавляем предупреждение если срок подачи истёк
+            if end_date_obj < current_date:
+                text += (
+                    "\n\n❗️Приём работ на конкурс завершён! Следите за обновлениями!"
+                )
 
             # Создаем клавиатуру
             markup = types.InlineKeyboardMarkup()
@@ -316,6 +326,19 @@ def start_contest_submission(call):
         user_id = call.from_user.id
         if user_id in temp_storage:
             del temp_storage[user_id]
+
+        # Получаем данные о текущем конкурсе
+        contest = ContestManager.get_current_contest()
+        current_date = datetime.now().date()
+        end_date_obj = datetime.strptime(contest[4], "%d.%m.%Y").date()
+        if end_date_obj < current_date:
+            bot.answer_callback_query(
+                call.id,
+                "❗️Приём работ на конкурс завершён! Следите за обновлениями!",
+                show_alert=True,
+            )
+            return
+
         # Проверка через метод exists
         if user_submissions.exists(user_id) or is_user_approved(user_id):
             bot.answer_callback_query(
@@ -702,13 +725,15 @@ def handle_confirmation(call):
         # Проверка и парсинг данных
         if ":" not in call.data:
             raise ValueError("Некорректный формат callback данных")
-            
+
         action, user_id_str = call.data.split(":", 1)
         user_id = int(user_id_str)
-        
+
         # Верификация пользователя
         if call.from_user.id != user_id:
-            bot.answer_callback_query(call.id, "❌ Неавторизованный доступ", show_alert=True)
+            bot.answer_callback_query(
+                call.id, "❌ Неавторизованный доступ", show_alert=True
+            )
             return
 
         # Удаление сообщения с кнопками
@@ -719,7 +744,7 @@ def handle_confirmation(call):
 
         # Получение данных
         content_data = user_content_storage.get_data(user_id)
-        
+
         # Проверка наличия данных
         if not content_data:
             bot.answer_callback_query(call.id, "❌ Сессия истекла, начните заново")
@@ -730,15 +755,15 @@ def handle_confirmation(call):
             bot.send_message(
                 user_id,
                 "📸 Отправьте фото или нажмите /skip",
-                reply_markup=types.ReplyKeyboardRemove()
+                reply_markup=types.ReplyKeyboardRemove(),
             )
-            
+
         elif action == "skip_admphoto":
             # Проверка обязательных полей
             if "text" not in content_data or not content_data["text"].strip():
                 bot.send_message(user_id, "❌ Текст сообщения обязателен!")
                 return
-                
+
             try:
                 preview_to_admin_chat(user_id, content_data)
             except KeyError as e:
@@ -751,7 +776,7 @@ def handle_confirmation(call):
     except ValueError as ve:
         logger.error(f"Invalid callback data: {call.data} - {str(ve)}")
         bot.answer_callback_query(call.id, "⚠️ Ошибка обработки запроса")
-        
+
     except Exception as e:
         logger.error(f"Critical error in confirmation: {str(e)}", exc_info=True)
         bot.answer_callback_query(call.id, "⛔ Критическая ошибка, обратитесь к админу")
@@ -852,7 +877,11 @@ def preview_to_admin_chat(user_id, content_data):
             "❌ Отменить", callback_data=f"cancel_send:{user_id}"
         ),
     )
-    bot.send_message(user_id, f"Предпросмотр:\n{content_data["text"]}\n\nОтправить сообщение админам?", reply_markup=markup)
+    bot.send_message(
+        user_id,
+        f"Предпросмотр:\n{content_data["text"]}\n\nОтправить сообщение админам?",
+        reply_markup=markup,
+    )
 
 
 # Обработчик кнопок подтверждения
