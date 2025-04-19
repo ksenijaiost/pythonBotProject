@@ -164,6 +164,7 @@ class SubmissionManager:
 
     @staticmethod
     def get_current_number():
+        """Возвращает текущее количество участников"""
         conn = sqlite3.connect("database/contests.db")
         c = conn.cursor()
         c.execute("SELECT value FROM counters WHERE name = 'submission'")
@@ -243,6 +244,7 @@ class SubmissionManager:
 
     @staticmethod
     def get_rejected_count():
+        """Возвращает количество отвергнутых работ"""
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
@@ -281,6 +283,11 @@ class SubmissionStorage:
     def get_all_users(self):
         with self.lock:
             return list(self.data.keys())
+    
+    def clear(self):
+        with self.lock:
+            self.data.clear()
+            self.timers.clear()
 
 
 user_submissions = SubmissionStorage()
@@ -319,7 +326,7 @@ def get_submission(submission_id):
         conn.close()
 
 
-def is_user_approved(user_id):  # Убрать self
+def is_user_approved(user_id):
     conn = sqlite3.connect("database/contests.db")
     cursor = conn.execute(
         """
