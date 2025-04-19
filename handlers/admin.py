@@ -340,12 +340,21 @@ def handle_adm_contest_reset(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "confirm_reset")
 def confirm_reset(call):
+    # Очищаем БД через менеджер
     SubmissionManager.reset_counter()
+
     logger = logging.getLogger(__name__)
     logger.debug("Обнуление данных - сброс счётчика")
-    logger.debug(SubmissionManager.get_pending_count())  # Должно быть 0
-    logger.debug(SubmissionManager.get_approved_count())  # Должно быть 0
-    logger.debug(SubmissionManager.get_current_number())  # Должно быть 0
+    logger.debug(f"количество работ на модерации: {SubmissionManager.get_pending_count()}/0")
+    logger.debug(f"количество одобренных работ: {SubmissionManager.get_approved_count()}/0") 
+    logger.debug(f"количество отвергнутых работ: {SubmissionManager.get_rejected_count()}/0")
+    logger.debug(f"текущее количество участников (всего): {SubmissionManager.get_current_number()}/0")
+
+    # Очищаем временное хранилище
+    user_submissions.clear()
+
+    logger.debug(f"Временных данных в хранилище: {len(user_submissions.get_all_users())}/0")
+
     bot.edit_message_text(
         text="✅ Счетчик участников сброшен!",
         chat_id=call.message.chat.id,

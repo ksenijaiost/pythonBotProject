@@ -180,10 +180,9 @@ def handle_user_find_guide(call):
         return
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
-    bot.edit_message_text(
-        "На данный момент поиск недоступен, но Вы можете посмотреть все гайды на нашем сайте",
-        call.message.chat.id,
-        call.message.message_id,
+    bot.send_message(
+        text="На данный момент поиск недоступен, но Вы можете посмотреть все гайды на нашем сайте",
+        chat_id=call.message.chat.id,
         reply_markup=Menu.guides_menu(),
     )
 
