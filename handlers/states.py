@@ -33,13 +33,3 @@ class DesignStates(StatesGroup):
     waiting_code = State()
     waiting_design_screen = State()
     waiting_game_screens = State()
-
-
-# Объединяем все состояния в одном пространстве имен
-class UserState:
-    admin = AdminStates
-    contest = ContestStates
-    news = NewsStates
-    code = CodeStates
-    pocket = PocketStates
-    design = DesignStates

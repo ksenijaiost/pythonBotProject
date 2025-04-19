@@ -478,7 +478,7 @@ def reject_work(call):
         msg = bot.send_message(
             call.message.chat.id,
             "Введите причину отклонения:",
-            reply_markup=types.ForceReply(),
+            reply_markup=types.ReplyKeyboardRemove(),
         )
         bot.register_for_reply(msg, lambda m: process_rejection(m, submission_id))
 
@@ -522,7 +522,7 @@ def handle_reply_button(call):
         msg = bot.send_message(
             call.message.chat.id,
             f"✍️ Введите ответ для пользователя:",
-            reply_markup=types.ForceReply(),
+            reply_markup=types.ReplyKeyboardRemove(),
         )
         bot.register_next_step_handler(msg, process_admin_reply)
 
