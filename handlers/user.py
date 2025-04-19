@@ -38,7 +38,7 @@ logging.basicConfig(
 
 # Глобальный словарь для отслеживания медиагрупп
 media_groups = defaultdict(list)
-# Временное хранилище для данных перед отправкой
+# Временное хранилище для данных
 temp_storage = {}
 
 def is_user_in_chat(user_id):
@@ -315,6 +315,8 @@ def start_contest_submission(call):
         return
     try:
         user_id = call.from_user.id
+        if user_id in temp_storage:
+            del temp_storage[user_id]
         # Проверка через метод exists
         if user_submissions.exists(user_id) or is_user_approved(user_id):
             bot.answer_callback_query(
@@ -648,6 +650,8 @@ def handle_cancel(message):
 @lock_input()
 def handle_user_to_admin(call):
     user_id = call.from_user.id
+    if user_id in temp_storage:
+        del temp_storage[user_id]
     user_content_storage.init_content(user_id, ADMIN_CHAT_ID)
 
     bot.set_state(
@@ -991,6 +995,8 @@ def handle_user_to_news(call):
 @lock_input()
 def handle_user_news_news(call):
     user_id = call.from_user.id
+    if user_id in temp_storage:
+        del temp_storage[user_id]
     user_content_storage.init_news(user_id)
     bot.set_state(user_id, UserState.WAITING_NEWS_SCREENSHOTS)
     # Сначала редактируем сообщение БЕЗ ForceReply
@@ -1014,6 +1020,8 @@ def handle_user_news_news(call):
 @lock_input()
 def handle_news_code(call):
     user_id = call.from_user.id
+    if user_id in temp_storage:
+        del temp_storage[user_id]
     user_content_storage.init_code(user_id)
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
@@ -1034,6 +1042,8 @@ def handle_news_code(call):
 @lock_input()
 def handle_news_pocket(call):
     user_id = call.from_user.id
+    if user_id in temp_storage:
+        del temp_storage[user_id]
     user_content_storage.init_pocket(user_id)
     bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_1)
     bot.edit_message_text(
@@ -1056,6 +1066,8 @@ def handle_news_pocket(call):
 @lock_input()
 def handle_news_design(call):
     user_id = call.from_user.id
+    if user_id in temp_storage:
+        del temp_storage[user_id]
     user_content_storage.init_design(user_id)
     bot.set_state(user_id, UserState.WAITING_DESIGN_CODE)
     bot.edit_message_text(
@@ -1546,9 +1558,6 @@ def handle_done(message):
     preview_send_to_news_chat(user_id)
 
 
-temp_storage_news = {}
-
-
 def preview_send_to_news_chat(user_id):
     try:
         # Получаем данные из хранилища
@@ -1658,7 +1667,7 @@ def preview_send_to_news_chat(user_id):
                         break
 
         # Сохраняем ВСЕ данные для отправки, включая сформированную media
-        temp_storage_news[user_id] = {
+        temp_storage[user_id] = {
             "media": media,
             "text": text,
             "user_info": user_info,
@@ -1706,7 +1715,7 @@ def handle_preview_actions_send_to_news_chat(call):
     try:
         if action == "confirm":
             # Получаем данные из хранилища
-            data = temp_storage_news.get(target_user_id)
+            data = temp_storage.get(target_user_id)
 
             # Отправка контента
             if not data:
@@ -1769,8 +1778,8 @@ def handle_preview_actions_send_to_news_chat(call):
     finally:
         # Гарантированная очистка данных
         # Очищаем хранилище
-        if user_id in temp_storage_news:
-            del temp_storage_news[user_id]
+        if user_id in temp_storage:
+            del temp_storage[user_id]
         user_content_storage.clear(user_id)
         bot.delete_state(user_id)
         logger.debug("Данные пользователя очищены")
