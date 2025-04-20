@@ -23,6 +23,7 @@ from handlers.envParams import (
     CONTEST_CHAT_ID,
     CHAT_USERNAME,
 )
+from handlers.decorator import private_chat_only
 from menu.links import Links
 from menu.menu import Menu
 from menu.constants import ButtonCallback, ButtonText, ConstantLinks, UserState
@@ -161,14 +162,31 @@ def run_cleanup():
 threading.Thread(target=run_cleanup, daemon=True).start()
 
 
+# Сбор "Юзер инфо"
+def get_user_info(user):
+    user_info = f"\n\n👤 Отправитель: "
+    if user.username:
+        user_info += f"@{user.username}"
+        if user.first_name:
+            user_info += f" ({user.first_name}"
+            if user.last_name:
+                user_info += f" {user.last_name}"
+            user_info += ")"
+    else:
+        user_info += f"[id:{user.id}]"
+        if user.first_name:
+            user_info += f" {user.first_name}"
+            if user.last_name:
+                user_info += f" {user.last_name}"
+    return user_info
+
+
 # ГАЙДЫ
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
+@private_chat_only(bot)
 def handle_user_guides(call):
-    if call.message.chat.type != "private":
-        bot.answer_callback_query(call.id, "ℹ️ Используйте бота в личных сообщениях")
-        return
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
@@ -182,14 +200,12 @@ def handle_user_guides(call):
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_FIND_GUIDE,
 )
+@private_chat_only(bot)
 def handle_user_find_guide(call):
-    if call.message.chat.type != "private":
-        bot.answer_callback_query(call.id, "ℹ️ Используйте бота в личных сообщениях")
-        return
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.send_message(
-        text="На данный момент поиск недоступен, но Вы можете посмотреть все гайды на нашем сайте",
+        text="😭 На данный момент поиск недоступен,\nно Вы можете посмотреть все гайды на нашем сайте 🤗",
         chat_id=call.message.chat.id,
         reply_markup=Menu.guides_menu(),
     )
@@ -221,10 +237,8 @@ def handle_cancel(message):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
+@private_chat_only(bot)
 def handle_user_guides(call):
-    if call.message.chat.type != "private":
-        bot.answer_callback_query(call.id, "ℹ️ Используйте бота в личных сообщениях")
-        return
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
@@ -239,10 +253,8 @@ def handle_user_guides(call):
     func=lambda call: call.data == ButtonCallback.USER_CONTEST_INFO,
 )
 @lock_input()
+@private_chat_only(bot)
 def handle_user_contest_info(call):
-    if call.message.chat.type != "private":
-        bot.answer_callback_query(call.id, "ℹ️ Используйте бота в личных сообщениях")
-        return
     try:
         # Получаем данные о текущем конкурсе
         contest = ContestManager.get_current_contest()
@@ -342,10 +354,8 @@ class ContestSubmission:
     func=lambda call: call.data == ButtonCallback.USER_CONTEST_SEND,
 )
 @lock_input()
+@private_chat_only(bot)
 def start_contest_submission(call):
-    if call.message.chat.type != "private":
-        bot.answer_callback_query(call.id, "ℹ️ Используйте бота в личных сообщениях")
-        return
     try:
         user_id = call.from_user.id
         if user_id in temp_storage:
@@ -384,10 +394,16 @@ def start_contest_submission(call):
 
         user_id = call.from_user.id
         user_submissions.add(user_id, ContestSubmission())
+        text = "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже).\n"
+
+        if SubmissionManager.delete_judge(user_id):
+            text += "\nВы будете удалены из списка судей."
+
+        text += "\n🚫 Для отмены используйте /cancel"
 
         bot.send_message(
             call.message.chat.id,
-            "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже):\n🚫 Для отмены используйте /cancel",
+            text,
         )
 
     except Exception as e:
@@ -534,9 +550,16 @@ def handle_send_method(call):
 
     try:
         submission = user_submissions.get(user_id)
+        user = bot.get_chat(user_id)
+        full_name = f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+        username = user.username if user.username else "отсутствует"
         # Сохраняем работу в БД со статусом "pending"
         submission_id = SubmissionManager.create_submission(
-            user_id=user_id, photos=submission.photos, caption=submission.caption
+            user_id=user_id,
+            username=username,
+            full_name=full_name,
+            photos=submission.photos,
+            caption=submission.caption
         )
         # Обновляем статус в БД
         SubmissionManager.update_submission(submission_id, status="pending")
@@ -640,14 +663,14 @@ def check_timeout():
 threading.Thread(target=check_timeout, daemon=True).start()
 
 
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST_JUDGE)
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.USER_CONTEST_JUDGE
+)
+@private_chat_only(bot)
 def handle_contest_judje(call):
     markup = types.InlineKeyboardMarkup()
     markup.row(
-        types.InlineKeyboardButton(
-            text="🧑‍⚖️ Записаться",
-            callback_data="new_judge"
-        ),
+        types.InlineKeyboardButton(text="🧑‍⚖️ Записаться", callback_data="new_judge"),
         types.InlineKeyboardButton(
             text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
         ),
@@ -655,7 +678,7 @@ def handle_contest_judje(call):
     bot.edit_message_text(
         f"Вы хотите записаться на судейство ближайшего конкурса?\n\n"
         "❗Напоминаю, что нельзя быть одновременно и судьёй, и участником. _При записи участником, запись на судейство аннулируется._\n\n"
-        "⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса - 🚫_для отмены ранее поданной заявки напишите выберите \"сообщение админам\" в главном меню._",
+        '⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса - 🚫_для отмены ранее поданной заявки напишите выберите "сообщение админам" в главном меню._',
         call.message.chat.id,
         call.message.message_id,
         parse_mode="Markdown",
@@ -668,52 +691,62 @@ def handle_new_judge(call):
     user_id = call.from_user.id
 
     try:
-        user = bot.get_chat(user_id)
-        user_info = f"\n\n👤 Отправитель: "
-        if user.username:
-            user_info += f"@{user.username}"
-            if user.first_name:
-                user_info += f" ({user.first_name}"
-                if user.last_name:
-                    user_info += f" {user.last_name}"
-                user_info += ")"
-        else:
-            user_info += f"[id:{user_id}]"
-            if user.first_name:
-                user_info += f" {user.first_name}"
-                if user.last_name:
-                    user_info += f" {user.last_name}"
-
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton(
-                "💬 Ответить", callback_data=f"reply_to_{user_id}"
+        # Проверяем существующую запись
+        if SubmissionManager.is_judge(user_id):
+            bot.answer_callback_query(
+                call.id, "❌ Вы уже подавали заявку на судейство!", show_alert=True
             )
-        )
+            return
+        # Провекряем на участие
+        if is_user_approved(user_id):
+            bot.answer_callback_query(
+                call.id, "❌ Вы уже записаны в качестве участника!", show_alert=True
+            )
+            return
+        # Добавляем в БД
+        user = bot.get_chat(user_id)
+        full_name = f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+        username = user.username if user.username else "отсутствует"
+        if SubmissionManager.add_judge(
+            user_id=user_id,
+            username=username,
+            full_name=full_name
+        ):
+            user_info = get_user_info(bot.get_chat(user_id))
+            markup = types.InlineKeyboardMarkup()
+            markup.add(
+                types.InlineKeyboardButton(
+                    "💬 Ответить", callback_data=f"reply_to_{user_id}"
+                )
+            )
+            full_text = f"Новая заявка на судейство!\n{user_info}"
+            bot.send_message(CONTEST_CHAT_ID, full_text, reply_markup=markup)
 
-        full_text = f"Новая заявка на судейство!\n{user_info}"
-        bot.send_message(CONTEST_CHAT_ID, full_text, reply_markup=markup)
-
-        bot.send_message(
-            user_id,
-            "✅ Заявка успешно отправлена!",
-            reply_markup=Menu.back_user_only_main_menu(),
-        )
-
+            bot.send_message(
+                user_id,
+                "✅ Заявка успешно отправлена!",
+                reply_markup=Menu.back_user_only_main_menu(),
+            )
+        else:
+            bot.answer_callback_query(
+                call.id,
+                "❌ Не удалось отправить заявку, свяжитесь с админами",
+                show_alert=True,
+            )
     except Exception as e:
         logger.error(f"handle_new_judge error: {e}")
-        bot.send_message(
-            user_id,
-            "❌ Ошибка при отправке заявки",
-            reply_markup=Menu.back_user_only_main_menu(),
+        bot.answer_callback_query(
+            call.id,
+            "⚠️ Произошла ошибка при отправке, свяжитесь с админами",
+            show_alert=True,
         )
-    
 
 
 # РЕПКА
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TURNIP)
+@private_chat_only(bot)
 def handle_user_turnip(call):
     markup = types.InlineKeyboardMarkup()
     markup.row(
@@ -769,6 +802,7 @@ def handle_cancel(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
 @lock_input()
+@private_chat_only(bot)
 def handle_user_to_admin(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
@@ -884,11 +918,12 @@ def handle_confirmation(call):
 
     except ValueError as ve:
         logger.error(f"Invalid callback data: {call.data} - {str(ve)}")
-        bot.answer_callback_query(call.id, "⚠️ Ошибка обработки запроса")
+        handle_submission_error(call.from_user.id, e)
+
 
     except Exception as e:
         logger.error(f"Critical error in confirmation: {str(e)}", exc_info=True)
-        bot.answer_callback_query(call.id, "⛔ Критическая ошибка, обратитесь к админу")
+        handle_submission_error(call.from_user.id, e)
 
 
 @bot.message_handler(
@@ -942,7 +977,7 @@ def handle_adm_photo(message):
 
     except Exception as e:
         logger.error(f"Content sending error: {e}")
-        bot.reply_to(message, "❌ Ошибка обработки контента")
+        handle_submission_error(message.from_user.id, e)
 
 
 @bot.message_handler(
@@ -1036,21 +1071,7 @@ def send_to_admin_chat(user_id, content_data):
         text = content_data["text"]
         photos = content_data["photos"]
 
-        user = bot.get_chat(user_id)
-        user_info = f"\n\n👤 Отправитель: "
-        if user.username:
-            user_info += f"@{user.username}"
-            if user.first_name:
-                user_info += f" ({user.first_name}"
-                if user.last_name:
-                    user_info += f" {user.last_name}"
-                user_info += ")"
-        else:
-            user_info += f"[id:{user_id}]"
-            if user.first_name:
-                user_info += f" {user.first_name}"
-                if user.last_name:
-                    user_info += f" {user.last_name}"
+        user_info = get_user_info(bot.get_chat(user_id))
 
         markup = types.InlineKeyboardMarkup()
         markup.add(
@@ -1104,10 +1125,8 @@ def send_to_admin_chat(user_id, content_data):
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_NEWS)
 @lock_input()
+@private_chat_only(bot)
 def handle_user_to_news(call):
-    if call.message.chat.type != "private":
-        bot.answer_callback_query(call.id, "ℹ️ Используйте бота в личных сообщениях")
-        return
     # Проверяем, состоит ли пользователь в чате
     if not is_user_in_chat(call.from_user.id):
         bot.send_message(
@@ -1841,7 +1860,7 @@ def preview_send_to_news_chat(user_id):
         logger.error(error_msg, exc_info=True)
         bot.send_message(
             user_id,
-            f"{error_msg}\nПопробуйте начать заново.",
+            "❌ Произошла ошибка\nПопробуйте начать заново.",
             reply_markup=Menu.back_user_only_main_menu(),
         )
 

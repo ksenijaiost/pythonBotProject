@@ -30,6 +30,8 @@ class ContestManager:
             """CREATE TABLE IF NOT EXISTS submissions
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
+                    username TEXT,
+                    full_name TEXT,
                     photos TEXT NOT NULL,
                     caption TEXT,
                     status TEXT DEFAULT 'pending',
@@ -44,6 +46,15 @@ class ContestManager:
                 submission_id INTEGER NOT NULL,
                 PRIMARY KEY (user_id, submission_id)
             )"""
+        )
+
+        # Таблица для судей
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS judges
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    username TEXT,
+                    full_name TEXT NOT NULL)"""
         )
 
         # Таблица для счетчиков
@@ -99,16 +110,16 @@ class ContestManager:
 
 class SubmissionManager:
     @staticmethod
-    def create_submission(user_id, photos, caption):
+    def create_submission(user_id, username, full_name, photos, caption):
 
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
             c.execute(
                 """INSERT INTO submissions 
-                        (user_id, photos, caption, status, timestamp)
-                        VALUES (?, ?, ?, 'pending', ?)""",
-                (user_id, json.dumps(photos), caption, datetime.now()),
+                    (user_id, username, full_name, photos, caption, timestamp)
+                    VALUES (?, ?, ?, ?, ?, datetime('now'))""",
+                (user_id, username, full_name, json.dumps(photos), caption),
             )
             submission_id = c.lastrowid
             conn.commit()
@@ -153,9 +164,12 @@ class SubmissionManager:
             # Очищаем подтвержденные работы
             c.execute("DELETE FROM approved_submissions")
 
+            # Очищаем список суудей
+            c.execute("DELETE FROM judges")
+
             # Сбрасываем автоинкремент для чистого старта
             c.execute(
-                "DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions')"
+                "DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions', 'judges')"
             )
 
             conn.commit()
@@ -221,6 +235,47 @@ class SubmissionManager:
             conn.close()
 
     @staticmethod
+    def is_judge(user_id):
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM judges WHERE user_id = ?", (user_id,))
+            return c.fetchone() is not None
+        finally:
+            conn.close()
+
+    @staticmethod
+    def add_judge(user_id, username, full_name):
+        if SubmissionManager.is_judge(user_id):
+            return False
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """INSERT INTO judges 
+                    (user_id, username, full_name)
+                    VALUES (?, ?, ?)""",
+                (user_id, username, full_name),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    @staticmethod
+    def delete_judge(user_id):
+        if not SubmissionManager.is_judge(user_id):
+            return False
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM judges WHERE user_id = ?", (user_id,))
+            conn.commit()
+            return True
+        finally:
+            conn.close()    
+
+    @staticmethod
     def get_pending_count():
         """Возвращает количество работ на модерации"""
         conn = sqlite3.connect("database/contests.db")
@@ -250,6 +305,49 @@ class SubmissionManager:
             c = conn.cursor()
             c.execute("SELECT COUNT(*) FROM submissions WHERE status = 'rejected'")
             return c.fetchone()[0]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_judges_count():
+        """Возвращает количество подавших заявку на судейство"""
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM judges")
+            return c.fetchone()[0]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_all_submissions_with_info():
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """SELECT 
+                    full_name, 
+                    username, 
+                    status, 
+                    submission_number 
+                   FROM submissions"""
+            )
+            return c.fetchall()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_all_judges_with_info():
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """SELECT 
+                    full_name, 
+                    username 
+                   FROM judges"""
+            )
+            return c.fetchall()
         finally:
             conn.close()
 
@@ -283,7 +381,7 @@ class SubmissionStorage:
     def get_all_users(self):
         with self.lock:
             return list(self.data.keys())
-    
+
     def clear(self):
         with self.lock:
             self.data.clear()
@@ -339,6 +437,19 @@ def is_user_approved(user_id):
     return count > 0
 
 
+def is_user_judge(user_id):
+    conn = sqlite3.connect("database/contests.db")
+    cursor = conn.execute(
+        """
+        SELECT COUNT(*) FROM judges WHERE user_id = ?
+        """,
+        (user_id,),
+    )
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count > 0
+
+
 class UserContentStorage:
     def __init__(self):
         self.data = {}
@@ -380,7 +491,7 @@ class UserContentStorage:
             "description": None,
             "speaker": None,
             "island": None,
-            "progress_message_id": None
+            "progress_message_id": None,
         }
 
     def init_code(self, user_id):
@@ -390,7 +501,7 @@ class UserContentStorage:
             "photos": [],
             "speaker": None,
             "island": None,
-            "progress_message_id": None
+            "progress_message_id": None,
         }
 
     def init_pocket(self, user_id):

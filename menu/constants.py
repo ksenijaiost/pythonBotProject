@@ -36,6 +36,8 @@ class ButtonText:
     ADM_CONTEST_INFO = "Информация о конкурсе"
     ADM_REVIEW_WORKS = "👁 Проверить работы"
     ADM_CONTEST_STATS = "Статистика по конкурсу"
+    ADM_SHOW_PARTICIPANTS = "👥 Список участников"
+    ADM_SHOW_JUDGES = "⚖️ Список судей"
     ADM_APPROVE = "✅ Одобрить"
     ADM_REJECT = "❌ Отклонить"
     ADM_CONTEST_RESET = "Сбросить счётчик работ"
@@ -54,7 +56,7 @@ class ButtonCallback:
     USER_TO_NEWS = "user_to_news"
     USER_TURNIP = "user_turnip"
     # Меню гайдов
-    USER_FIND_GUIDE = "find_guide"
+    USER_FIND_GUIDE = "user_find_guide"
     # Меню конкурсов
     USER_CONTEST_INFO = "user_contest_info"
     USER_CONTEST_SEND = "user_contest_send"
@@ -73,7 +75,9 @@ class ButtonCallback:
     ADM_CONTEST_INFO = "adm_contest_info"
     ADM_CONTEST_RESET = "adm_consest_reset"
     ADM_REVIEW_WORKS = "adm_review_works"
-    ADM_CONTEST_STATS = "stats"
+    ADM_CONTEST_STATS = "adm_stats"
+    ADM_SHOW_PARTICIPANTS = "adm_show_participants"
+    ADM_SHOW_JUDGES = "adm_show_judges"
     ADM_APPROVE = "adm_approve_"
     ADM_REJECT = "adm_reject_"
 

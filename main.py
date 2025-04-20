@@ -13,7 +13,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
 
-
 # После нажатия старт - проверка в списке админов, выдача меню админа или пользователя
 @bot.message_handler(commands=["start"])
 def start(message):
