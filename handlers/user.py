@@ -639,6 +639,77 @@ def check_timeout():
 
 threading.Thread(target=check_timeout, daemon=True).start()
 
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST_JUDGE)
+def handle_contest_judje(call):
+    markup = types.InlineKeyboardMarkup()
+    markup.row(
+        types.InlineKeyboardButton(
+            text="🧑‍⚖️ Записаться",
+            callback_data="new_judge"
+        ),
+        types.InlineKeyboardButton(
+            text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+        ),
+    )
+    bot.edit_message_text(
+        f"Вы хотите записаться на судейство ближайшего конкурса?\n\n"
+        "❗Напоминаю, что нельзя быть одновременно и судьёй, и участником. _При записи участником, запись на судейство аннулируется._\n\n"
+        "⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса - 🚫_для отмены ранее поданной заявки напишите выберите \"сообщение админам\" в главном меню._",
+        call.message.chat.id,
+        call.message.message_id,
+        parse_mode="Markdown",
+        reply_markup=markup,
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "new_judge")
+def handle_new_judge(call):
+    user_id = call.from_user.id
+
+    try:
+        user = bot.get_chat(user_id)
+        user_info = f"\n\n👤 Отправитель: "
+        if user.username:
+            user_info += f"@{user.username}"
+            if user.first_name:
+                user_info += f" ({user.first_name}"
+                if user.last_name:
+                    user_info += f" {user.last_name}"
+                user_info += ")"
+        else:
+            user_info += f"[id:{user_id}]"
+            if user.first_name:
+                user_info += f" {user.first_name}"
+                if user.last_name:
+                    user_info += f" {user.last_name}"
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton(
+                "💬 Ответить", callback_data=f"reply_to_{user_id}"
+            )
+        )
+
+        full_text = f"Новая заявка на судейство!\n{user_info}"
+        bot.send_message(CONTEST_CHAT_ID, full_text, reply_markup=markup)
+
+        bot.send_message(
+            user_id,
+            "✅ Заявка успешно отправлена!",
+            reply_markup=Menu.back_user_only_main_menu(),
+        )
+
+    except Exception as e:
+        logger.error(f"handle_new_judge error: {e}")
+        bot.send_message(
+            user_id,
+            "❌ Ошибка при отправке заявки",
+            reply_markup=Menu.back_user_only_main_menu(),
+        )
+    
+
+
 # РЕПКА
 
 
