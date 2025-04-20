@@ -198,6 +198,28 @@ def handle_user_find_guide(call):
 # КОНКУРСЫ
 
 
+# Общий обработчик отмены
+@bot.message_handler(
+    commands=["cancel"],
+    func=lambda message: bot.get_state(message.from_user.id)
+    in [
+        UserState.WAITING_CONTEST_PHOTOS,
+        UserState.WAITING_CONTEST_TEXT,
+        UserState.WAITING_CONTEST_PREVIEW,
+    ],
+)
+def handle_cancel(message):
+    user_id = message.from_user.id
+    if user_submissions.exists(user_id):
+        user_submissions.remove(user_id)
+    bot.delete_state(user_id)
+    bot.send_message(
+        message.chat.id,
+        "🚫 Отправка отменена",
+        reply_markup=Menu.back_user_only_main_menu(),
+    )
+
+
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
 def handle_user_guides(call):
     if call.message.chat.type != "private":
@@ -304,7 +326,9 @@ class ContestSubmission:
         self.caption = ""  # Подпись к работе
         self.media_group_id = None  # ID медиагруппы (для альбомов)
         self.submission_time = time.time()  # Время начала отправки
-        self.status = "collecting_photos"  # collecting_photos → waiting_text → preview
+        self.status = (
+            UserState.WAITING_CONTEST_PHOTOS
+        )  # collecting_photos → waiting_text → preview
         self.send_by_bot = None  # True/False
         self.last_media_time = time.time()  # Время последнего фото в группе
         self.group_check_timer = None  # Таймер проверки завершения группы
@@ -363,8 +387,7 @@ def start_contest_submission(call):
 
         bot.send_message(
             call.message.chat.id,
-            "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже):",
-            reply_markup=types.ForceReply(),
+            "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже):\n🚫 Для отмены используйте /cancel",
         )
 
     except Exception as e:
@@ -378,7 +401,7 @@ def start_contest_submission(call):
 @bot.message_handler(
     content_types=["photo"],
     func=lambda m: user_submissions.exists(m.from_user.id)
-    and user_submissions.get(m.from_user.id).status == "collecting_photos",
+    and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_PHOTOS,
 )
 @lock_input(allow_media_groups=True)
 def handle_work_submission(message):
@@ -418,11 +441,11 @@ def handle_work_submission(message):
             return
 
         # Переходим к получению текста
-        submission.status = "waiting_text"
+        submission.status = UserState.WAITING_CONTEST_TEXT
         bot.send_message(
             user_id,
-            "📝 Теперь отправьте текст для работы (описание, название и т.д.):",
-            reply_markup=types.ForceReply(),
+            "📝 Теперь отправьте текст для работы (описание, название и т.д.):\n_Пишите его тут в чате_\n🚫 Для отмены используйте /cancel",
+            parse_mode="Markdown",
         )
     except Exception as e:
         handle_submission_error(user_id, e)
@@ -447,18 +470,18 @@ def handle_group_completion(user_id):
             return
 
         # Переход к запросу текста
-        submission.status = "waiting_text"
+        submission.status = UserState.WAITING_CONTEST_TEXT
         bot.send_message(
             user_id,
-            "📝 Теперь отправьте текст для работы:",
-            reply_markup=types.ForceReply(),
+            "📝 Теперь отправьте текст для работы:\n_Пишите его тут в чате_\n🚫 Для отмены используйте /cancel",
+            parse_mode="Markdown",
         )
 
 
 @bot.message_handler(
     content_types=["text"],
     func=lambda m: user_submissions.exists(m.from_user.id)
-    and user_submissions.get(m.from_user.id).status == "waiting_text",
+    and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_TEXT,
 )
 @lock_input()
 def handle_text(message):
@@ -467,7 +490,7 @@ def handle_text(message):
 
     try:
         submission.caption = message.text
-        submission.status = "preview"
+        submission.status = UserState.WAITING_CONTEST_PREVIEW
 
         # Показываем предпросмотр
         media = [types.InputMediaPhoto(pid) for pid in submission.photos]
@@ -486,7 +509,7 @@ def handle_text(message):
         )
         markup.row(
             types.InlineKeyboardButton(
-                "❌ Отменить отправку работы", callback_data="cancel_submission"
+                "🚫 Отменить отправку работы", callback_data="cancel_submission"
             )
         )
 
@@ -562,6 +585,7 @@ def handle_cancel_submission(call):
     try:
         if user_submissions.exists(user_id):
             user_submissions.remove(user_id)
+            bot.delete_state(user_id)
             bot.answer_callback_query(call.id, "❌ Отправка отменена")
 
             # Удаляем сообщения с предпросмотром
@@ -572,7 +596,11 @@ def handle_cancel_submission(call):
                     )
                 except:
                     pass
-
+            bot.send_message(
+                user_id,
+                "Вернуться в главное меню?",
+                reply_markup=Menu.back_user_only_main_menu(),
+            )
     except Exception as e:
         handle_submission_error(user_id, e)
 
@@ -630,7 +658,7 @@ def handle_user_turnip(call):
     )
 
 
-# Общий обработчик отвмены для сообщения админам и новостей
+# Общий обработчик отмены для сообщения админам и новостей
 @bot.message_handler(
     commands=["cancel"],
     func=lambda message: bot.get_state(message.from_user.id)
@@ -683,9 +711,9 @@ def handle_user_to_admin(call):
 
     bot.send_message(
         call.message.chat.id,
-        "📤 Пришлите текст, который хотели бы отправить админам (о фото я спрошу позже)\n"
-        "❌ Для отмены используйте /cancel",
-        reply_markup=types.ForceReply(),
+        "📤 Пришлите текст, который хотели бы отправить админам (о фото я спрошу позже)\n_Пишите текст тут в чате_\n"
+        "🚫 Для отмены используйте /cancel",
+        parse_mode="Markdown",
     )
 
 
@@ -709,6 +737,11 @@ def handle_user_text(message):
         ),
         types.InlineKeyboardButton("❌ Нет", callback_data=f"skip_admphoto:{user_id}"),
     )
+    markup.row(
+        types.InlineKeyboardButton(
+            "🚫 Отменить отправку", callback_data=f"cancel_admphoto:{user_id}"
+        )
+    )
     bot.send_message(
         message.chat.id,
         "Хотите добавить фото?",
@@ -717,7 +750,9 @@ def handle_user_text(message):
 
 
 @bot.callback_query_handler(
-    func=lambda call: call.data.startswith(("confirm_admphoto", "skip_admphoto")),
+    func=lambda call: call.data.startswith(
+        ("confirm_admphoto", "skip_admphoto", "cancel_admphoto")
+    ),
 )
 @lock_input()
 def handle_confirmation(call):
@@ -754,7 +789,7 @@ def handle_confirmation(call):
         if action == "confirm_admphoto":
             bot.send_message(
                 user_id,
-                "📸 Отправьте фото или нажмите /skip",
+                "📸 Отправьте фото или нажмите /skip\n 🚫 Для отмены используйте /cancel",
                 reply_markup=types.ReplyKeyboardRemove(),
             )
 
@@ -772,6 +807,9 @@ def handle_confirmation(call):
             except Exception as e:
                 logger.error(f"Preview error: {str(e)}")
                 bot.send_message(user_id, "⚠️ Ошибка формирования предпросмотра")
+
+        elif action == "cancel_admphoto":
+            handle_cancel(call.message)
 
     except ValueError as ve:
         logger.error(f"Invalid callback data: {call.data} - {str(ve)}")
@@ -816,7 +854,7 @@ def handle_adm_photo(message):
             msg = bot.send_message(
                 message.chat.id,
                 f"📸 Принято скриншотов: {new_count}/10\n"
-                "Отправьте ещё фото или нажмите /done",
+                "Отправьте ещё фото или нажмите /done\n🚫 Для отмены используйте /cancel",
             )
 
             # Обновляем ID последнего сообщения в хранилище
@@ -874,7 +912,7 @@ def preview_to_admin_chat(user_id, content_data):
             "✅ Отправить", callback_data=f"confirm_send:{user_id}"
         ),
         types.InlineKeyboardButton(
-            "❌ Отменить", callback_data=f"cancel_send:{user_id}"
+            "🚫 Отменить", callback_data=f"cancel_send:{user_id}"
         ),
     )
     bot.send_message(
@@ -1029,16 +1067,9 @@ def handle_user_news_news(call):
     bot.set_state(user_id, UserState.WAITING_NEWS_SCREENSHOTS)
     # Сначала редактируем сообщение БЕЗ ForceReply
     bot.edit_message_text(
-        text="📸 Пришлите до 10 скриншотов для новости (отправьте все одним сообщением).",
+        text="📸 Пришлите до 10 скриншотов для новости (отправьте все одним сообщением).\n 🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-    )
-
-    # Затем отправляем новое сообщение с ForceReply
-    bot.send_message(
-        call.message.chat.id,
-        "⬇️ Отправьте скриншоты в этом чате:",
-        reply_markup=types.ForceReply(selective=True),
     )
 
 
@@ -1053,14 +1084,11 @@ def handle_news_code(call):
     user_content_storage.init_code(user_id)
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
-        text="🔢 Пришлите код\nФормат (важен!): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 ваши цифры)",
+        text="🔢 Пришлите код\n"
+        "Формат (важен!): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 ваши цифры)\n"
+        "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-    )
-    bot.send_message(
-        call.message.chat.id,
-        "⬇️ Отправьте код в этом чате:",
-        reply_markup=types.ForceReply(selective=True),
     )
 
 
@@ -1076,15 +1104,13 @@ def handle_news_pocket(call):
     bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_1)
     bot.edit_message_text(
         text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы - лицевую и обратную стороны.\n"
-        'Лучше всего это сделать через кнопку "SAVE"!\n'
-        "❌ Для отмены используйте /cancel",
+        'Лучше всего это сделать через кнопку "SAVE"!\n',
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
     )
     bot.send_message(
         call.message.chat.id,
-        "⬇️ Отправьте скриншот лицевой стороны (с персонажем):",
-        reply_markup=types.ForceReply(selective=True),
+        "⬇️ Отправьте скриншот лицевой стороны (с персонажем):\n🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1099,14 +1125,9 @@ def handle_news_design(call):
     user_content_storage.init_design(user_id)
     bot.set_state(user_id, UserState.WAITING_DESIGN_CODE)
     bot.edit_message_text(
-        text="🎨 Введите код дизайна в формате:\n`MA-0000-0000-0000`",
+        text="🎨 Введите код дизайна в формате:\n`MA-0000-0000-0000`\n🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-    )
-    bot.send_message(
-        call.message.chat.id,
-        "⬇️ Отправьте код в этом чате:",
-        reply_markup=types.ForceReply(selective=True),
     )
 
 
@@ -1172,7 +1193,7 @@ def handle_news_screenshots(message):
             message,
             f"{progress_bar}\n"
             f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
-            "Отправьте еще или нажмите /done",
+            "Отправьте еще или нажмите /done\n🚫 Для отмены используйте /cancel",
         )
         # Сохраняем ID сообщения для последующего удаления
         data["progress_message_id"] = sent_msg.message_id
@@ -1181,7 +1202,10 @@ def handle_news_screenshots(message):
 
 def request_description(user_id):
     bot.set_state(user_id, UserState.WAITING_NEWS_DESCRIPTION)
-    bot.send_message(user_id, "📝 Напишите описание новости (или /skip):")
+    bot.send_message(
+        user_id,
+        "📝 Напишите описание новости (или /skip).\n🚫 Для отмены используйте /cancel",
+    )
 
 
 @bot.message_handler(
@@ -1215,7 +1239,9 @@ def handle_done_news_photos(message):
 def skip_news_description(message):
     user_id = message.from_user.id
     bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
-    bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+    bot.send_message(
+        message.chat.id, "👤 Введите имя спикера:\n🚫 Для отмены используйте /cancel"
+    )
 
 
 @bot.message_handler(
@@ -1228,7 +1254,9 @@ def handle_news_description(message):
     data = user_content_storage.get_data(user_id)
     data["description"] = message.text
     bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
-    bot.send_message(message.chat.id, "👤 Введите имя спикера:")
+    bot.send_message(
+        message.chat.id, "👤 Введите имя спикера:\n🚫 Для отмены используйте /cancel"
+    )
 
 
 @bot.message_handler(
@@ -1241,7 +1269,10 @@ def handle_news_speaker(message):
     data = user_content_storage.get_data(user_id)
     data["speaker"] = message.text
     bot.set_state(user_id, UserState.WAITING_NEWS_ISLAND)
-    bot.send_message(message.chat.id, "🏝️ Введите название острова:")
+    bot.send_message(
+        message.chat.id,
+        "🏝️ Введите название острова:\n🚫 Для отмены используйте /cancel",
+    )
 
 
 @bot.message_handler(
@@ -1272,7 +1303,10 @@ def handle_code_value(message):
 
     user_content_storage.get_data(user_id)["code"] = code
     bot.set_state(user_id, UserState.WAITING_CODE_SCREENSHOTS)
-    bot.send_message(message.chat.id, "📸 Пришлите до 10 скриншотов:")
+    bot.send_message(
+        message.chat.id,
+        "📸 Пришлите до 10 скриншотов:\n🚫 Для отмены используйте /cancel",
+    )
 
 
 @bot.message_handler(
@@ -1327,7 +1361,7 @@ def handle_code_screenshots(message):
             message,
             f"{progress_bar}\n"
             f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
-            "Отправьте еще или нажмите /done",
+            "Отправьте еще или нажмите /done\n🚫 Для отмены используйте /cancel",
         )
         # Сохраняем ID сообщения для последующего удаления
         data["progress_message_id"] = sent_msg.message_id
@@ -1336,7 +1370,9 @@ def handle_code_screenshots(message):
 
 def request_speaker(user_id):
     bot.set_state(user_id, UserState.WAITING_CODE_SPEAKER)
-    bot.send_message(user_id, "👤 Введите имя спикера:")
+    bot.send_message(
+        user_id, "👤 Введите имя спикера:\n🚫 Для отмены используйте /cancel"
+    )
 
 
 @bot.message_handler(
@@ -1372,7 +1408,10 @@ def handle_code_speaker(message):
     data = user_content_storage.get_data(user_id)
     data["speaker"] = message.text
     bot.set_state(user_id, UserState.WAITING_CODE_ISLAND)
-    bot.send_message(message.chat.id, "🏝️ Введите название острова:")
+    bot.send_message(
+        message.chat.id,
+        "🏝️ Введите название острова:\n🚫 Для отмены используйте /cancel",
+    )
 
 
 @bot.message_handler(
@@ -1412,8 +1451,7 @@ def handle_pocket_screens(message):
         message.chat.id,
         "✅ Первый скриншот принят!\n"
         "Теперь отправьте второй скриншот - обратную сторону с QR-кодом.\n"
-        "❌ Для отмены используйте /cancel",
-        reply_markup=types.ForceReply(),
+        "🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1435,7 +1473,11 @@ def handle_pocket_screens(message):
 
     # Проверяем что собрано 2 фото
     if len(data["photos"]) != 2:
-        bot.send_message(message.chat.id, "❌ Ошибка обработки, начните заново")
+        bot.send_message(
+            message.chat.id,
+            "❌ Ошибка обработки, начните заново",
+            reply_markup=Menu.news_menu(),
+        )
         return
 
     # Завершаем процесс
@@ -1454,7 +1496,7 @@ def handle_pocket_screens(message):
 def handle_invalid_content(message):
     bot.send_message(
         message.chat.id,
-        "❌ Пожалуйста, отправьте фото\n ❌ Для отмены используйте /cancel",
+        "❌ Пожалуйста, отправьте фото\n🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1474,7 +1516,10 @@ def handle_design_code(message):
 
     user_content_storage.get_data(user_id)["code"] = code
     bot.set_state(user_id, UserState.WAITING_DESIGN_DESIGN_SCREEN)
-    bot.send_message(message.chat.id, "📸 Пришлите скриншот из приложения дизайнера:")
+    bot.send_message(
+        message.chat.id,
+        "📸 Пришлите скриншот из приложения дизайнера:\n🚫 Для отмены используйте /cancel",
+    )
 
 
 @bot.message_handler(
@@ -1504,7 +1549,7 @@ def handle_design_screen(message):
     bot.set_state(user_id, UserState.WAITING_DESIGN_GAME_SCREENS)
     bot.send_message(
         message.chat.id,
-        "🎮 Пришлите до 9 (НЕ 10) скриншотов с применением рисунка в игре:",
+        "🎮 Пришлите до 9 (НЕ 10) скриншотов с применением рисунка в игре:\n🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1560,7 +1605,7 @@ def handle_game_screens(message):
         message,
         f"{progress_bar}\n"
         f"✅ Скриншот добавлен! Всего: {len(data['game_screens'])}/9\n"
-        "Отправьте еще или нажмите /done",
+        "Отправьте еще или нажмите /done\n🚫 Для отмены используйте /cancel",
     )
     # Сохраняем ID сообщения для последующего удаления
     data["progress_message_id"] = sent_msg.message_id
@@ -1711,7 +1756,7 @@ def preview_send_to_news_chat(user_id):
                 "✅ Подтвердить отправку", callback_data=f"news_confirm_{user_id}"
             ),
             types.InlineKeyboardButton(
-                "❌ Отменить", callback_data=f"news_cancel_{user_id}"
+                "🚫 Отменить", callback_data=f"news_cancel_{user_id}"
             ),
         )
         bot.send_message(

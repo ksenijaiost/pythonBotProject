@@ -214,7 +214,7 @@ def handle_admin_input(message):
         except ValueError:
             bot.send_message(
                 message.chat.id,
-                "❌ Неверный формат! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)",
+                "🚫 Неверный формат! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)",
             )
             return
 
@@ -323,7 +323,7 @@ def handle_adm_contest_reset(call):
         types.InlineKeyboardButton(
             "✅ Подтвердить сброс", callback_data="confirm_reset"
         ),
-        types.InlineKeyboardButton("❌ Отменить", callback_data="cancel_reset"),
+        types.InlineKeyboardButton("🚫 Отменить", callback_data="cancel_reset"),
     )
 
     current_count = SubmissionManager.get_current_number()
@@ -367,7 +367,7 @@ def confirm_reset(call):
 def handle_cancel_reset(call):
     bot.delete_message(call.message.chat.id, call.message.message_id)
     bot.edit_message_text(
-        text="❌ Сброс счетчика отменен",
+        text="🚫 Сброс счетчика отменен",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=Menu.back_adm_contest_menu,
@@ -487,7 +487,6 @@ def reject_work(call):
         msg = bot.send_message(
             call.message.chat.id,
             "Введите причину отклонения:",
-            reply_markup=types.ForceReply(),
         )
         bot.register_for_reply(msg, lambda m: process_rejection(m, submission_id))
 
@@ -531,7 +530,6 @@ def handle_reply_button(call):
         msg = bot.send_message(
             call.message.chat.id,
             f"✍️ Введите ответ для пользователя:",
-            reply_markup=types.ForceReply(),
         )
         bot.register_next_step_handler(msg, process_admin_reply)
 
