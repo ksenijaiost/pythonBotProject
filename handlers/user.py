@@ -26,7 +26,13 @@ from handlers.envParams import (
 from handlers.decorator import private_chat_only
 from menu.links import Links
 from menu.menu import Menu
-from menu.constants import ButtonCallback, ButtonText, ConstantLinks, UserState
+from menu.constants import (
+    MONTHS_RU,
+    ButtonCallback,
+    ButtonText,
+    ConstantLinks,
+    UserState,
+)
 
 
 from threading import Lock
@@ -249,6 +255,14 @@ def handle_user_guides(call):
     )
 
 
+def format_date_ru(date_str: str) -> str:
+    try:
+        date_obj = datetime.strptime(date_str, "%d.%m.%Y")
+        return f"{date_obj.day} {MONTHS_RU[date_obj.month]} {date_obj.year}"
+    except:
+        return date_str
+
+
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_CONTEST_INFO,
 )
@@ -274,28 +288,23 @@ def handle_user_contest_info(call):
             # Основной текст сообщения
             theme = contest[1]
             description = contest[2]
-            contest_date = datetime.strptime(contest[3], "%d.%m.%Y").strftime(
-                "%d %B %Y"
-            )
-            end_date_of_admission = datetime.strptime(contest[4], "%d.%m.%Y").strftime(
-                "%d %B %Y"
-            )
+            contest_date = format_date_ru(contest[3])
+            end_date_of_admission = format_date_ru(contest[4])
 
             text = (
                 f"🏆 *Актуальный конкурс!*\n\n"
                 f"📌 *Тема:* {theme}\n"
                 f"📝 *Описание:* {description}\n\n"
-                f"🗓 *Даты проведения:*\n"
-                f"➡️ Дата проведения конкурса: {contest_date}\n"
-                f"➡️ Приём работ до: {end_date_of_admission}\n\n"
-                f"Можете ознакомиться с правилами участия (и списком предыдущих конкурсов) по ссылке:"
+                f"🗓 *Даты:*\n"
+                f"⏳ Приём работ до *{end_date_of_admission}*\n"
+                f"🎉 Дата проведения: *{contest_date}*\n\n"
             )
 
             # Добавляем предупреждение если срок подачи истёк
             if end_date_obj < current_date:
-                text += (
-                    "\n\n❗️Приём работ на конкурс завершён! Следите за обновлениями!"
-                )
+                text += "❗️*Приём работ на конкурс завершён*! _Следите за обновлениями_!\n\n"
+
+            text += "Можете ознакомиться с правилами участия (_и списком предыдущих конкурсов_) по ссылке:"
 
             # Создаем клавиатуру
             markup = types.InlineKeyboardMarkup()
@@ -319,6 +328,7 @@ def handle_user_contest_info(call):
             message_id=call.message.message_id,
             text=text,
             reply_markup=markup,
+            parse_mode="Markdown",
         )
 
     except Exception as e:
@@ -1528,6 +1538,7 @@ pocket_user_locks = {}
 # Добавляем кэш для отслеживания отправленных ошибок
 error_media_groups = {}
 
+
 # Обработчики для USER_NEWS_POCKET
 @bot.message_handler(
     content_types=["photo"],
@@ -1557,7 +1568,6 @@ def handle_media_group(message, data, user_id):
     # Проверяем, была ли уже обработана эта группа
     if media_group_id in error_media_groups:
         return  # Пропускаем повторную обработку
-    
 
     # Проверяем, есть ли уже сохраненные фото
     existing_photos = user_content_storage.get_data(user_id, "pocket").get("photos", [])
@@ -1570,7 +1580,9 @@ def handle_media_group(message, data, user_id):
             parse_mode="Markdown",
         )
         # Устанавливаем таймер для очистки кэша (5 минут)
-        threading.Timer(300, lambda: error_media_groups.pop(media_group_id, None)).start()
+        threading.Timer(
+            300, lambda: error_media_groups.pop(media_group_id, None)
+        ).start()
         return
 
     largest_photo = max(message.photo, key=lambda p: p.file_size)

@@ -112,3 +112,18 @@ class UserState:
     WAITING_DESIGN_CODE = 'waiting_design_code'
     WAITING_DESIGN_DESIGN_SCREEN = 'waiting_design_design_screen'
     WAITING_DESIGN_GAME_SCREENS = 'waiting_design_game_screens'
+
+MONTHS_RU = {
+    1: "января",
+    2: "февраля",
+    3: "марта",
+    4: "апреля",
+    5: "мая",
+    6: "июня",
+    7: "июля",
+    8: "августа",
+    9: "сентября",
+    10: "октября",
+    11: "ноября",
+    12: "декабря"
+}

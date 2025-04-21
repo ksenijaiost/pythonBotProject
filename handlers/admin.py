@@ -113,9 +113,9 @@ def start_contest_update(call):
 
             text += (
                 f"🏷 Тема: {theme}\n"
-                f"📝 Описание: {description}\n"
-                f"🗓 Дата проведения: {contest_date}\n"
-                f"⏳ Приём работ до: {end_date_of_admission}\n\n"
+                f"📝 Описание: {description}\n\n"
+                f"⏳ Приём работ до: {end_date_of_admission}\n"
+                f"🗓 Дата проведения: {contest_date}\n\n"
                 "Хотите изменить данные?"
             )
 
