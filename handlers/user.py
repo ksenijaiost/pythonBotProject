@@ -1227,7 +1227,7 @@ def handle_user_news_news(call):
     )
 
 
-@bot.callback_query_handler(
+    @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE_DREAM
 )
 @lock_input()
@@ -1389,6 +1389,7 @@ def request_description(user_id):
 def handle_done_news_photos(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "news")
+
 
     # Удаляем сообщение прогресса
     if data.get("progress_msg_id"):
@@ -1557,6 +1558,7 @@ def handle_done_news_photos(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "code")
 
+
     # Удаляем сообщение прогресса
     if data.get("progress_msg_id"):
         try:
@@ -1597,7 +1599,7 @@ def handle_code_island(message):
     data = user_content_storage.get_data(user_id, "code")
     data["island"] = message.text
     preview_send_to_news_chat(user_id)
-
+ 
 
 pocket_media_groups = {}
 pocket_user_locks = {}
@@ -1893,6 +1895,7 @@ def handle_done(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "design")
 
+
     try:
         if data.get("progress_message_id"):
             bot.delete_message(message.chat.id, data["progress_message_id"])
@@ -1900,6 +1903,7 @@ def handle_done(message):
         logger.warning(f"Ошибка удаления прогресса: {e}")
 
     preview_send_to_news_chat(user_id)
+
 
 
 def preview_send_to_news_chat(user_id):
@@ -2012,6 +2016,7 @@ def preview_send_to_news_chat(user_id):
 
         # Сохраняем ВСЕ данные для отправки, включая сформированную media
         temp_storage[user_id] = {
+
             "media": media,
             "text": text,
             "user_info": user_info,
@@ -2028,6 +2033,7 @@ def preview_send_to_news_chat(user_id):
             ),
             types.InlineKeyboardButton(
                 "🚫 Отменить", callback_data=f"news_cancel_{user_id}"
+
             ),
         )
         bot.send_message(
