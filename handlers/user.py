@@ -979,7 +979,7 @@ def handle_adm_photo(message):
             msg = bot.send_message(
                 message.chat.id,
                 f"📸 Принято скриншотов: {new_count}/10\n"
-                "Отправьте ещё фото или нажмите /done\n🚫 Для отмены используйте /cancel",
+                "Отправьте ещё фото или нажмите /done\n\n🚫 Для отмены используйте /cancel",
             )
 
             # Обновляем ID последнего сообщения в хранилище
@@ -1183,7 +1183,7 @@ def handle_user_news_news(call):
 
 
 @bot.callback_query_handler(
-    func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE
+    func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE_DREAM
 )
 @lock_input()
 def handle_news_code(call):
@@ -1194,10 +1194,31 @@ def handle_news_code(call):
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
         text="🔢 Пришлите код\n"
-        "Формат (важен!): код сна DA-0000-0000-0000, код курортного бюро RA-0000-0000-0000 (вместо 0 ваши цифры)\n"
+        "*Формат*: `DA-0000-0000-0000` _(вместо 0 ваши цифры)_\n"
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
+        parse_mode="Markdown",
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE_DLC
+)
+@lock_input()
+def handle_news_code(call):
+    user_id = call.from_user.id
+    if user_id in temp_storage:
+        del temp_storage[user_id]
+    user_content_storage.init_code(user_id)
+    bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
+    bot.edit_message_text(
+        text="🔢 Пришлите код\n"
+        "*Формат*: `RA-0000-0000-0000` _(вместо 0 ваши цифры)_\n"
+        "🚫 Для отмены используйте /cancel",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        parse_mode="Markdown",
     )
 
 
@@ -1300,7 +1321,7 @@ def handle_news_screenshots(message):
             message,
             f"{progress_bar}\n"
             f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
-            "Отправьте еще или нажмите /done\n🚫 Для отмены используйте /cancel",
+            "Отправьте еще или нажмите /done\n\n🚫 Для отмены используйте /cancel",
         )
         # Сохраняем ID сообщения для последующего удаления
         data["progress_message_id"] = sent_msg.message_id
@@ -1468,7 +1489,7 @@ def handle_code_screenshots(message):
             message,
             f"{progress_bar}\n"
             f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
-            "Отправьте еще или нажмите /done\n🚫 Для отмены используйте /cancel",
+            "Отправьте еще или нажмите /done\n\n🚫 Для отмены используйте /cancel",
         )
         # Сохраняем ID сообщения для последующего удаления
         data["progress_message_id"] = sent_msg.message_id
@@ -1810,7 +1831,7 @@ def handle_game_screens(message):
         message,
         f"{progress_bar}\n"
         f"✅ Скриншот добавлен! Всего: {len(data['game_screens'])}/9\n"
-        "Отправьте еще или нажмите /done\n🚫 Для отмены используйте /cancel",
+        "Отправьте еще или нажмите /done\n\n🚫 Для отмены используйте /cancel",
     )
     # Сохраняем ID сообщения для последующего удаления
     data["progress_message_id"] = sent_msg.message_id
@@ -1890,7 +1911,7 @@ def preview_send_to_news_chat(user_id):
             media = [types.InputMediaPhoto(p["file_id"]) for p in unique_photos[:10]]
 
         elif data["type"] == "code":
-            text = f"{ButtonText.USER_NEWS_CODE}\n"
+            text = f"Отправка кода (сон или курорт)\n"
             text += f"\nКод: {data.get('code', 'Не указан')}"
             text += f"\n👤 Спикер: {data.get('speaker', 'Не указан')}"
             text += f"\n🏝️ Остров: {data.get('island', 'Не указан')}"

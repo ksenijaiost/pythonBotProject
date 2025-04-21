@@ -24,8 +24,8 @@ class ButtonText:
     # Меню новостей
     USER_NEWS_NEWS = "📰 Отправить новость в газету"
     USER_NEWS_CODE_DREAM = "🛏️ Отправить код сна"
-    USER_NEWS_CODE_DLC = "🏡 Отправить код курортного-бюро"
-    USER_NEWS_POCKET = "👋 Отправить код дружбы в PocketCamp"
+    USER_NEWS_CODE_DLC = "🏡 Отправить код курортного бюро"
+    USER_NEWS_POCKET = "👋 Отправить код дружбы PocketCamp"
     USER_NEWS_DESIGN = "🎨 Отправить код кастомного дизайна"
 
     # Администраторские
@@ -64,7 +64,8 @@ class ButtonCallback:
     USER_CONTEST_JUDGE = "user_contest_judge"
     # Меню новостей
     USER_NEWS_NEWS = "user_news_news"
-    USER_NEWS_CODE = "user_news_code"
+    USER_NEWS_CODE_DREAM = "user_news_code_dream"
+    USER_NEWS_CODE_DLC = "user_news_code_dlc"
     USER_NEWS_POCKET = "user_news_pocket"
     USER_NEWS_DESIGN = "user_news_design"
     # Администраторские
