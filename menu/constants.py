@@ -89,6 +89,8 @@ class ConstantLinks:
     SITE = "https://acnh.tilda.ws"
     # Конкурсы
     CONTEST_LINK = "https://acnh.tilda.ws/contest#rules"
+    # Помощь
+    HELP_LINK = "http://acnh.tilda.ws/bot_guide"
 
 
 class UserState:
