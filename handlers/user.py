@@ -363,48 +363,57 @@ def start_contest_submission(call):
 
         # Получаем данные о текущем конкурсе
         contest = ContestManager.get_current_contest()
-        current_date = datetime.now().date()
-        end_date_obj = datetime.strptime(contest[4], "%d.%m.%Y").date()
-        if end_date_obj < current_date:
+        if not contest:
+            # Если конкурсов нет в базе
             bot.answer_callback_query(
                 call.id,
-                "❗️Приём работ на конкурс завершён! Следите за обновлениями!",
+                "🎉 В настоящее время активных конкурсов нет.\nСледите за обновлениями!",
                 show_alert=True,
             )
             return
+        else:
+            current_date = datetime.now().date()
+            end_date_obj = datetime.strptime(contest[4], "%d.%m.%Y").date()
+            if end_date_obj < current_date:
+                bot.answer_callback_query(
+                    call.id,
+                    "❗️Приём работ на конкурс завершён! Следите за обновлениями!",
+                    show_alert=True,
+                )
+                return
 
-        # Проверка через метод exists
-        if user_submissions.exists(user_id) or is_user_approved(user_id):
-            bot.answer_callback_query(
-                call.id,
-                "⚠️ Вы уже отправляли работу! Если хотите изменить работу, свяжитесь с админами.",
-                show_alert=True,
-            )
-            return
+            # Проверка через метод exists
+            if user_submissions.exists(user_id) or is_user_approved(user_id):
+                bot.answer_callback_query(
+                    call.id,
+                    "⚠️ Вы уже отправляли работу! Если хотите изменить работу, свяжитесь с админами.",
+                    show_alert=True,
+                )
+                return
 
-        # Проверяем, состоит ли пользователь в чате
-        if not is_user_in_chat(call.from_user.id):
+            # Проверяем, состоит ли пользователь в чате
+            if not is_user_in_chat(call.from_user.id):
+                bot.send_message(
+                    call.message.chat.id,
+                    "❌ Для участия в конкурсе необходимо состоять в нашем чате!\n"
+                    + Links.get_chat_url(),
+                    reply_markup=Menu.contests_menu(),
+                )
+                return
+
+            user_id = call.from_user.id
+            user_submissions.add(user_id, ContestSubmission())
+            text = "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже).\n"
+
+            if SubmissionManager.delete_judge(user_id):
+                text += "\nВы будете удалены из списка судей."
+
+            text += "\n🚫 Для отмены используйте /cancel"
+
             bot.send_message(
                 call.message.chat.id,
-                "❌ Для участия в конкурсе необходимо состоять в нашем чате!\n"
-                + Links.get_chat_url(),
-                reply_markup=Menu.contests_menu(),
+                text,
             )
-            return
-
-        user_id = call.from_user.id
-        user_submissions.add(user_id, ContestSubmission())
-        text = "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже).\n"
-
-        if SubmissionManager.delete_judge(user_id):
-            text += "\nВы будете удалены из списка судей."
-
-        text += "\n🚫 Для отмены используйте /cancel"
-
-        bot.send_message(
-            call.message.chat.id,
-            text,
-        )
 
     except Exception as e:
         logger = logging.getLogger(__name__)
@@ -551,7 +560,9 @@ def handle_send_method(call):
     try:
         submission = user_submissions.get(user_id)
         user = bot.get_chat(user_id)
-        full_name = f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+        full_name = (
+            f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+        )
         username = user.username if user.username else "отсутствует"
         # Сохраняем работу в БД со статусом "pending"
         submission_id = SubmissionManager.create_submission(
@@ -559,7 +570,7 @@ def handle_send_method(call):
             username=username,
             full_name=full_name,
             photos=submission.photos,
-            caption=submission.caption
+            caption=submission.caption,
         )
         # Обновляем статус в БД
         SubmissionManager.update_submission(submission_id, status="pending")
@@ -705,12 +716,12 @@ def handle_new_judge(call):
             return
         # Добавляем в БД
         user = bot.get_chat(user_id)
-        full_name = f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+        full_name = (
+            f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+        )
         username = user.username if user.username else "отсутствует"
         if SubmissionManager.add_judge(
-            user_id=user_id,
-            username=username,
-            full_name=full_name
+            user_id=user_id, username=username, full_name=full_name
         ):
             user_info = get_user_info(bot.get_chat(user_id))
             markup = types.InlineKeyboardMarkup()
@@ -777,8 +788,7 @@ def handle_user_turnip(call):
         UserState.WAITING_CODE_SCREENSHOTS,
         UserState.WAITING_CODE_SPEAKER,
         UserState.WAITING_CODE_ISLAND,
-        UserState.WAITING_POCKET_SCREEN_1,
-        UserState.WAITING_POCKET_SCREEN_2,
+        UserState.WAITING_POCKET_SCREEN,
         UserState.WAITING_DESIGN_CODE,
         UserState.WAITING_DESIGN_DESIGN_SCREEN,
         UserState.WAITING_DESIGN_GAME_SCREENS,
@@ -807,7 +817,7 @@ def handle_user_to_admin(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
         del temp_storage[user_id]
-    user_content_storage.init_content(user_id, ADMIN_CHAT_ID)
+    user_content_storage.init_content(user_id)
 
     bot.set_state(
         user_id,
@@ -832,7 +842,7 @@ def handle_user_to_admin(call):
 @lock_input()
 def handle_user_text(message):
     user_id = message.from_user.id
-    content_data = user_content_storage.get_data(user_id)
+    content_data = user_content_storage.get_data(user_id, "content")
     content_data["text"] = message.text
     bot.set_state(user_id, UserState.WAITING_ADMIN_CONTENT_PHOTO)
     markup = types.InlineKeyboardMarkup()
@@ -883,7 +893,7 @@ def handle_confirmation(call):
             logger.warning(f"Ошибка удаления сообщения: {str(e)}")
 
         # Получение данных
-        content_data = user_content_storage.get_data(user_id)
+        content_data = user_content_storage.get_data(user_id, "content")
 
         # Проверка наличия данных
         if not content_data:
@@ -920,7 +930,6 @@ def handle_confirmation(call):
         logger.error(f"Invalid callback data: {call.data} - {str(ve)}")
         handle_submission_error(call.from_user.id, e)
 
-
     except Exception as e:
         logger.error(f"Critical error in confirmation: {str(e)}", exc_info=True)
         handle_submission_error(call.from_user.id, e)
@@ -934,7 +943,7 @@ def handle_confirmation(call):
 @lock_input(allow_media_groups=True)
 def handle_adm_photo(message):
     user_id = message.from_user.id
-    content_data = user_content_storage.get_data(user_id)
+    content_data = user_content_storage.get_data(user_id, "content")
     try:
         if message.photo:
             # Берем самое высокое разрешение (последний элемент в списке)
@@ -988,7 +997,7 @@ def handle_adm_photo(message):
 @lock_input()
 def handle_done(message):
     user_id = message.from_user.id
-    content_data = user_content_storage.get_data(user_id)
+    content_data = user_content_storage.get_data(user_id, "content")
     # Удаляем последнее сообщение-счетчик
     if content_data.get("counter_msg_id"):
         try:
@@ -1067,7 +1076,7 @@ def handle_confirmation(call):
 def send_to_admin_chat(user_id, content_data):
     try:
         logger.debug("send_to_admin_chat - ", content_data)
-        target_chat = content_data["target_chat"]
+        target_chat = ADMIN_CHAT_ID
         text = content_data["text"]
         photos = content_data["photos"]
 
@@ -1191,16 +1200,14 @@ def handle_news_pocket(call):
     if user_id in temp_storage:
         del temp_storage[user_id]
     user_content_storage.init_pocket(user_id)
-    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_1)
+    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN)
     bot.edit_message_text(
         text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы - лицевую и обратную стороны.\n"
-        'Лучше всего это сделать через кнопку "SAVE"!\n',
+        'Лучше всего это сделать через кнопку "SAVE"!\n\n'
+        "⬇️ Отправьте оба скриншота в чат.\n"
+        "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-    )
-    bot.send_message(
-        call.message.chat.id,
-        "⬇️ Отправьте скриншот лицевой стороны (с персонажем):\n🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1238,7 +1245,7 @@ def parse_speaker_info(text):
 @lock_input(allow_media_groups=True)
 def handle_news_screenshots(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "news")
 
     try:
         # Удаляем предыдущее сообщение с прогрессом
@@ -1305,7 +1312,7 @@ def request_description(user_id):
 @lock_input()
 def handle_done_news_photos(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "news")
 
     # Удаляем сообщение прогресса
     if data.get("progress_msg_id"):
@@ -1341,7 +1348,7 @@ def skip_news_description(message):
 @lock_input()
 def handle_news_description(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "news")
     data["description"] = message.text
     bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
     bot.send_message(
@@ -1356,7 +1363,7 @@ def handle_news_description(message):
 @lock_input()
 def handle_news_speaker(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "news")
     data["speaker"] = message.text
     bot.set_state(user_id, UserState.WAITING_NEWS_ISLAND)
     bot.send_message(
@@ -1372,7 +1379,7 @@ def handle_news_speaker(message):
 @lock_input()
 def handle_news_island(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "news")
     data["island"] = message.text
     preview_send_to_news_chat(user_id)
 
@@ -1391,7 +1398,7 @@ def handle_code_value(message):
         bot.reply_to(message, "❌ Неверный формат кода! Пример: DA-1234-5678-9012")
         return
 
-    user_content_storage.get_data(user_id)["code"] = code
+    user_content_storage.get_data(user_id, "code")["code"] = code
     bot.set_state(user_id, UserState.WAITING_CODE_SCREENSHOTS)
     bot.send_message(
         message.chat.id,
@@ -1406,7 +1413,7 @@ def handle_code_value(message):
 @lock_input(allow_media_groups=True)
 def handle_code_screenshots(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "code")
 
     try:
         # Удаляем предыдущее сообщение с прогрессом
@@ -1472,7 +1479,7 @@ def request_speaker(user_id):
 @lock_input()
 def handle_done_news_photos(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "code")
 
     # Удаляем сообщение прогресса
     if data.get("progress_msg_id"):
@@ -1495,7 +1502,7 @@ def handle_done_news_photos(message):
 @lock_input()
 def handle_code_speaker(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "code")
     data["speaker"] = message.text
     bot.set_state(user_id, UserState.WAITING_CODE_ISLAND)
     bot.send_message(
@@ -1511,75 +1518,171 @@ def handle_code_speaker(message):
 @lock_input()
 def handle_code_island(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "code")
     data["island"] = message.text
     preview_send_to_news_chat(user_id)
 
 
+pocket_media_groups = {}
+pocket_user_locks = {}
+# Добавляем кэш для отслеживания отправленных ошибок
+error_media_groups = {}
+
 # Обработчики для USER_NEWS_POCKET
 @bot.message_handler(
     content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN_1,
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN,
 )
 @lock_input(allow_media_groups=True)
 def handle_pocket_screens(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
 
-    # Сохраняем последний (наибольший) размер фото
-    photo_data = {
-        "file_id": message.photo[-1].file_id,
-        "unique_id": message.photo[-1].file_unique_id,
-    }
-    data["photos"].append(photo_data)
-    user_content_storage.update_data(user_id, data)
+    try:
+        data = user_content_storage.get_data(user_id, "pocket")
 
-    # Меняем состояние на ожидание второго фото
-    bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN_2)
+        # Обработка медиагруппы
+        if message.media_group_id:
+            return handle_media_group(message, data, user_id)
 
-    bot.send_message(
-        message.chat.id,
-        "✅ Первый скриншот принят!\n"
-        "Теперь отправьте второй скриншот - обратную сторону с QR-кодом.\n"
-        "🚫 Для отмены используйте /cancel",
-    )
+        # Обработка одиночного фото
+        handle_single_photo(message, data, user_id)
+
+    except Exception as e:
+        logger.error(f"Error: {str(e)}", exc_info=True)
+        handle_pocket_error(user_id)
 
 
-@bot.message_handler(
-    content_types=["photo"],
-    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN_2,
-)
-@lock_input(allow_media_groups=True)
-def handle_pocket_screens(message):
-    user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+def handle_media_group(message, data, user_id):
+    media_group_id = message.media_group_id
+    # Проверяем, была ли уже обработана эта группа
+    if media_group_id in error_media_groups:
+        return  # Пропускаем повторную обработку
+    
 
-    # Сохраняем последний размер фото
-    new_photo_data = {
-        "file_id": message.photo[-1].file_id,
-        "unique_id": message.photo[-1].file_unique_id,
-    }
-    data["photos"].append(new_photo_data)
-
-    # Проверяем что собрано 2 фото
-    if len(data["photos"]) != 2:
+    # Проверяем, есть ли уже сохраненные фото
+    existing_photos = user_content_storage.get_data(user_id, "pocket").get("photos", [])
+    if len(existing_photos) > 0:
+        # Помечаем группу как обработанную с ошибкой
+        error_media_groups[media_group_id] = True
         bot.send_message(
-            message.chat.id,
-            "❌ Ошибка обработки, начните заново",
-            reply_markup=Menu.news_menu(),
+            user_id,
+            "❌ _Вы уже отправили 1 фото ранее, а сейчас отправляете ещё несколько!_\nПришлите второе фото заново!",
+            parse_mode="Markdown",
         )
+        # Устанавливаем таймер для очистки кэша (5 минут)
+        threading.Timer(300, lambda: error_media_groups.pop(media_group_id, None)).start()
         return
 
-    # Завершаем процесс
-    bot.delete_state(user_id)
+    largest_photo = max(message.photo, key=lambda p: p.file_size)
+    mg_id = message.media_group_id
 
-    preview_send_to_news_chat(user_id)
+    # Если группа новая - сбрасываем предыдущие данные
+    if mg_id not in pocket_media_groups:
+        pocket_media_groups[mg_id] = {
+            "user_id": user_id,
+            "photos": [],
+            "timer": threading.Timer(3.0, process_pocket_group, [mg_id]),
+        }
+        pocket_media_groups[mg_id]["timer"].start()
+    else:
+        # Если в группе уже 2+ фото - отменяем обработку
+        if len(pocket_media_groups[mg_id]["photos"]) >= 2:
+            pocket_media_groups[mg_id]["timer"].cancel()
+            del pocket_media_groups[mg_id]
+            handle_pocket_error(user_id, "❌ Можно отправить только 2 фото!")
+            return
+
+    # Добавляем уникальные фото
+    if not any(
+        p["unique_id"] == largest_photo.file_unique_id
+        for p in pocket_media_groups[mg_id]["photos"]
+    ):
+        pocket_media_groups[mg_id]["photos"].append(
+            {
+                "file_id": largest_photo.file_id,
+                "unique_id": largest_photo.file_unique_id,
+            }
+        )
+
+        # Если превысили лимит - сразу отменяем
+        if len(pocket_media_groups[mg_id]["photos"]) > 2:
+            handle_pocket_error(user_id, "❌ Можно отправить только 2 фото!")
+            pocket_media_groups[mg_id]["timer"].cancel()
+            del pocket_media_groups[mg_id]
+
+
+def handle_single_photo(message, data, user_id):
+    # Проверка инициализации
+    if "photos" not in data:
+        user_content_storage.init_pocket(user_id)
+        data = user_content_storage.get_data(user_id)
+
+    largest_photo = max(message.photo, key=lambda p: p.file_size)
+
+    # Добавление фото
+    data["photos"].append(
+        {"file_id": largest_photo.file_id, "unique_id": largest_photo.file_unique_id}
+    )
+
+    # Лимит фото
+    if len(data["photos"]) > 2:
+        handle_pocket_error(user_id, "❌ Максимум 2 фото!")
+        return
+
+    user_content_storage.update_data(user_id, data)
+
+    # Логика переходов
+    if len(data["photos"]) == 1:
+        bot.send_message(user_id, "📸 Отправьте второе фото")
+    elif len(data["photos"]) == 2:
+        finish_pocket_submission(user_id)
+
+
+def process_pocket_group(media_group_id):
+    group_data = pocket_media_groups.pop(media_group_id, None)
+    if not group_data:
+        return
+
+    user_id = group_data["user_id"]
+    try:
+        # Проверяем окончательное количество
+        if len(group_data["photos"]) != 2:
+            handle_pocket_error(user_id, "❌ Нужно отправить ровно 2 фото!")
+            return
+
+        # Сохраняем и обрабатываем
+        data = user_content_storage.get_data(user_id, "pocket")
+        data["photos"] = group_data["photos"]
+        user_content_storage.update_data(user_id, data)
+        finish_pocket_submission(user_id)
+
+    except Exception as e:
+        handle_pocket_error(user_id, f"❌ Ошибка: {str(e)}")
+
+
+def handle_pocket_error(user_id, message="❌ Ошибка обработки"):
+    user_content_storage.clear(user_id)
+    bot.delete_state(user_id)
+    bot.send_message(user_id, message, reply_markup=Menu.news_menu())
+    # Отменяем все таймеры для пользователя
+    for mg_id, group in list(pocket_media_groups.items()):
+        if group["user_id"] == user_id:
+            group["timer"].cancel()
+            del pocket_media_groups[mg_id]
+
+
+def finish_pocket_submission(user_id):
+    try:
+        bot.delete_state(user_id)
+        preview_send_to_news_chat(user_id)
+    finally:
+        user_content_storage.clear(user_id)
+        pocket_user_locks.pop(user_id, None)
 
 
 # Обработчик неверного контента
 @bot.message_handler(
-    func=lambda m: bot.get_state(m.from_user.id)
-    in [UserState.WAITING_POCKET_SCREEN_1, UserState.WAITING_POCKET_SCREEN_2]
+    func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN
     and m.content_type != "photo",
 )
 @lock_input()
@@ -1604,7 +1707,7 @@ def handle_design_code(message):
         bot.reply_to(message, "❌ Неверный формат! Пример: MA-1234-5678-9012")
         return
 
-    user_content_storage.get_data(user_id)["code"] = code
+    user_content_storage.get_data(user_id, "design")["code"] = code
     bot.set_state(user_id, UserState.WAITING_DESIGN_DESIGN_SCREEN)
     bot.send_message(
         message.chat.id,
@@ -1620,7 +1723,7 @@ def handle_design_code(message):
 @lock_input(allow_media_groups=True)
 def handle_design_screen(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "design")
 
     # Проверяем, что это не альбом
     if message.media_group_id:
@@ -1651,7 +1754,7 @@ def handle_design_screen(message):
 @lock_input(allow_media_groups=True)
 def handle_game_screens(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "design")
 
     try:
         # Удаляем предыдущее сообщение с прогрессом
@@ -1710,7 +1813,7 @@ def handle_game_screens(message):
 @lock_input()
 def handle_done(message):
     user_id = message.from_user.id
-    data = user_content_storage.get_data(user_id)
+    data = user_content_storage.get_data(user_id, "design")
 
     try:
         if data.get("progress_message_id"):
@@ -1724,7 +1827,7 @@ def handle_done(message):
 def preview_send_to_news_chat(user_id):
     try:
         # Получаем данные из хранилища
-        data = user_content_storage.get_data(user_id)
+        data = user_content_storage.get_data(user_id, "design")
         user = bot.get_chat(user_id)
         logger = logging.getLogger(__name__)
 

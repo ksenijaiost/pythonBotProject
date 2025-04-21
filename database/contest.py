@@ -273,7 +273,7 @@ class SubmissionManager:
             conn.commit()
             return True
         finally:
-            conn.close()    
+            conn.close()
 
     @staticmethod
     def get_pending_count():
@@ -454,14 +454,53 @@ class UserContentStorage:
     def __init__(self):
         self.data = {}
         self.lock = Lock()
-
-    def init_content(self, user_id, target_chat):
-        self.data[user_id] = {
-            "target_chat": target_chat,
-            "photos": [],
-            "text": None,
-            "counter_msg_id": None,
+        self.defaults = {
+            "content": {
+                "type": "content",
+                "photos": [],
+                "text": None,
+                "counter_msg_id": None,
+            },
+            "news": {
+                "type": "news",
+                "photos": [],
+                "description": None,
+                "speaker": None,
+                "island": None,
+                "progress_message_id": None,
+            },
+            "code": {
+                "type": "code",
+                "code": None,
+                "photos": [],
+                "speaker": None,
+                "island": None,
+                "progress_message_id": None,
+            },
+            "pocket": {"type": "pocket", "photos": [], "media_group_id": None},
+            "design": {
+                "type": "design",
+                "code": None,
+                "design_screen": [],
+                "game_screens": [],
+                "progress_message_id": None,
+            },
         }
+
+    def init_content(self, user_id, content_type="content"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_news(self, user_id, content_type="news"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_code(self, user_id, content_type="code"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_pocket(self, user_id, content_type="pocket"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_design(self, user_id, content_type="design"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
 
     def update_counter_message(self, user_id, message_id):
         if user_id in self.data:
@@ -477,44 +516,15 @@ class UserContentStorage:
             if user_id in self.data:
                 self.data[user_id]["text"] = text
 
-    def get_data(self, user_id):
+    def get_data(self, user_id, content_type):
         with self.lock:
-            return self.data.get(user_id)
+            if user_id not in self.data:
+                self.init_content(user_id, content_type)
+            return self.data[user_id]
 
     def update_data(self, user_id, new_data):
-        self.data[user_id] = new_data
-
-    def init_news(self, user_id):
-        self.data[user_id] = {
-            "type": "news",
-            "photos": [],
-            "description": None,
-            "speaker": None,
-            "island": None,
-            "progress_message_id": None,
-        }
-
-    def init_code(self, user_id):
-        self.data[user_id] = {
-            "type": "code",
-            "code": None,
-            "photos": [],
-            "speaker": None,
-            "island": None,
-            "progress_message_id": None,
-        }
-
-    def init_pocket(self, user_id):
-        self.data[user_id] = {"type": "pocket", "photos": [], "media_group_id": None}
-
-    def init_design(self, user_id):
-        self.data[user_id] = {
-            "type": "design",
-            "code": None,
-            "design_screen": [],
-            "game_screens": [],
-            "progress_message_id": None,
-        }
+        with self.lock:
+            self.data[user_id]=new_data
 
     def clear(self, user_id):
         with self.lock:
