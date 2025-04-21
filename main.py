@@ -27,11 +27,11 @@ def start(message):
 
         # Проверка администратора
         if message.from_user.id in admin_ids:
-            logger.debug("Admin detected")
+            logger.debug(f"Admin detected - {user_id}")
             main_menu = Menu.adm_menu()
             welcome_text = "Добро пожаловать, администратор! 👑"
         else:
-            logger.debug("Regular user detected")
+            logger.debug(f"Regular user detected - {user_id}")
             main_menu = Menu.user_menu()
             welcome_text = "Добро пожаловать! 😊"
 
