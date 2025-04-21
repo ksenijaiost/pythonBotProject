@@ -30,6 +30,8 @@ class ContestManager:
             """CREATE TABLE IF NOT EXISTS submissions
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
+                    username TEXT,
+                    full_name TEXT,
                     photos TEXT NOT NULL,
                     caption TEXT,
                     status TEXT DEFAULT 'pending',
@@ -44,6 +46,15 @@ class ContestManager:
                 submission_id INTEGER NOT NULL,
                 PRIMARY KEY (user_id, submission_id)
             )"""
+        )
+
+        # Таблица для судей
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS judges
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    username TEXT,
+                    full_name TEXT NOT NULL)"""
         )
 
         # Таблица для счетчиков
@@ -99,16 +110,16 @@ class ContestManager:
 
 class SubmissionManager:
     @staticmethod
-    def create_submission(user_id, photos, caption):
+    def create_submission(user_id, username, full_name, photos, caption):
 
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
             c.execute(
                 """INSERT INTO submissions 
-                        (user_id, photos, caption, status, timestamp)
-                        VALUES (?, ?, ?, 'pending', ?)""",
-                (user_id, json.dumps(photos), caption, datetime.now()),
+                    (user_id, username, full_name, photos, caption, timestamp)
+                    VALUES (?, ?, ?, ?, ?, datetime('now'))""",
+                (user_id, username, full_name, json.dumps(photos), caption),
             )
             submission_id = c.lastrowid
             conn.commit()
@@ -153,9 +164,12 @@ class SubmissionManager:
             # Очищаем подтвержденные работы
             c.execute("DELETE FROM approved_submissions")
 
+            # Очищаем список суудей
+            c.execute("DELETE FROM judges")
+
             # Сбрасываем автоинкремент для чистого старта
             c.execute(
-                "DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions')"
+                "DELETE FROM sqlite_sequence WHERE name IN ('submissions', 'approved_submissions', 'judges')"
             )
 
             conn.commit()
@@ -164,6 +178,7 @@ class SubmissionManager:
 
     @staticmethod
     def get_current_number():
+        """Возвращает текущее количество участников"""
         conn = sqlite3.connect("database/contests.db")
         c = conn.cursor()
         c.execute("SELECT value FROM counters WHERE name = 'submission'")
@@ -220,6 +235,47 @@ class SubmissionManager:
             conn.close()
 
     @staticmethod
+    def is_judge(user_id):
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM judges WHERE user_id = ?", (user_id,))
+            return c.fetchone() is not None
+        finally:
+            conn.close()
+
+    @staticmethod
+    def add_judge(user_id, username, full_name):
+        if SubmissionManager.is_judge(user_id):
+            return False
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """INSERT INTO judges 
+                    (user_id, username, full_name)
+                    VALUES (?, ?, ?)""",
+                (user_id, username, full_name),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    @staticmethod
+    def delete_judge(user_id):
+        if not SubmissionManager.is_judge(user_id):
+            return False
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM judges WHERE user_id = ?", (user_id,))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    @staticmethod
     def get_pending_count():
         """Возвращает количество работ на модерации"""
         conn = sqlite3.connect("database/contests.db")
@@ -243,11 +299,55 @@ class SubmissionManager:
 
     @staticmethod
     def get_rejected_count():
+        """Возвращает количество отвергнутых работ"""
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
             c.execute("SELECT COUNT(*) FROM submissions WHERE status = 'rejected'")
             return c.fetchone()[0]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_judges_count():
+        """Возвращает количество подавших заявку на судейство"""
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM judges")
+            return c.fetchone()[0]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_all_submissions_with_info():
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """SELECT 
+                    full_name, 
+                    username, 
+                    status, 
+                    submission_number 
+                   FROM submissions"""
+            )
+            return c.fetchall()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_all_judges_with_info():
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """SELECT 
+                    full_name, 
+                    username 
+                   FROM judges"""
+            )
+            return c.fetchall()
         finally:
             conn.close()
 
@@ -281,6 +381,11 @@ class SubmissionStorage:
     def get_all_users(self):
         with self.lock:
             return list(self.data.keys())
+
+    def clear(self):
+        with self.lock:
+            self.data.clear()
+            self.timers.clear()
 
 
 user_submissions = SubmissionStorage()
@@ -319,7 +424,7 @@ def get_submission(submission_id):
         conn.close()
 
 
-def is_user_approved(user_id):  # Убрать self
+def is_user_approved(user_id):
     conn = sqlite3.connect("database/contests.db")
     cursor = conn.execute(
         """
@@ -332,18 +437,70 @@ def is_user_approved(user_id):  # Убрать self
     return count > 0
 
 
+def is_user_judge(user_id):
+    conn = sqlite3.connect("database/contests.db")
+    cursor = conn.execute(
+        """
+        SELECT COUNT(*) FROM judges WHERE user_id = ?
+        """,
+        (user_id,),
+    )
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count > 0
+
+
 class UserContentStorage:
     def __init__(self):
         self.data = {}
         self.lock = Lock()
-
-    def init_content(self, user_id, target_chat):
-        self.data[user_id] = {
-            "target_chat": target_chat,
-            "photos": [],
-            "text": None,
-            "counter_msg_id": None,
+        self.defaults = {
+            "content": {
+                "type": "content",
+                "photos": [],
+                "text": None,
+                "counter_msg_id": None,
+            },
+            "news": {
+                "type": "news",
+                "photos": [],
+                "description": None,
+                "speaker": None,
+                "island": None,
+                "progress_message_id": None,
+            },
+            "code": {
+                "type": "code",
+                "code": None,
+                "photos": [],
+                "speaker": None,
+                "island": None,
+                "progress_message_id": None,
+            },
+            "pocket": {"type": "pocket", "photos": [], "media_group_id": None},
+            "design": {
+                "type": "design",
+                "code": None,
+                "design_screen": [],
+                "game_screens": [],
+                "progress_message_id": None,
+            },
         }
+
+    def init_content(self, user_id, content_type="content"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_news(self, user_id, content_type="news"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_code(self, user_id, content_type="code"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_pocket(self, user_id, content_type="pocket"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
+
+    def init_design(self, user_id, content_type="design"):
+        self.data[user_id] = self.defaults.get(content_type, {}).copy()
 
     def update_counter_message(self, user_id, message_id):
         if user_id in self.data:
@@ -359,44 +516,15 @@ class UserContentStorage:
             if user_id in self.data:
                 self.data[user_id]["text"] = text
 
-    def get_data(self, user_id):
+    def get_data(self, user_id, content_type):
         with self.lock:
-            return self.data.get(user_id)
+            if user_id not in self.data:
+                self.init_content(user_id, content_type)
+            return self.data[user_id]
 
     def update_data(self, user_id, new_data):
-        self.data[user_id] = new_data
-
-    def init_news(self, user_id):
-        self.data[user_id] = {
-            "type": "news",
-            "photos": [],
-            "description": None,
-            "speaker": None,
-            "island": None,
-            "progress_message_id": None
-        }
-
-    def init_code(self, user_id):
-        self.data[user_id] = {
-            "type": "code",
-            "code": None,
-            "photos": [],
-            "speaker": None,
-            "island": None,
-            "progress_message_id": None
-        }
-
-    def init_pocket(self, user_id):
-        self.data[user_id] = {"type": "pocket", "photos": [], "media_group_id": None}
-
-    def init_design(self, user_id):
-        self.data[user_id] = {
-            "type": "design",
-            "code": None,
-            "design_screen": [],
-            "game_screens": [],
-            "progress_message_id": None,
-        }
+        with self.lock:
+            self.data[user_id]=new_data
 
     def clear(self, user_id):
         with self.lock:

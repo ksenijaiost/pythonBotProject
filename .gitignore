@@ -13,3 +13,18 @@ venv/
 # Кэш Python
 __pycache__/
 *.py[cod]
+
+# Базовые паттерны для SQLite
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Для других СУБД
+*.dump
+*.backup
+*.psql
+*.mysql
+
+# Директория для локальных дампов
+/local_dumps/
