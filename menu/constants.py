@@ -10,20 +10,21 @@ class ButtonText:
     USER_CONTEST = "🏆 Конкурсы"
     USER_TO_ADMIN = "📨 Сообщение админам"
     USER_TO_NEWS = "📰 Новости в газету"
-    USER_TURNIP = "🥕 Репка"
-    USER_HEAD_CHAT = "🐻 Наш чат Animal Crossing"
-    USER_CHANEL = "📢 Наш канал"
-    USER_CHAT_NINTENDO = "🎮 Чат с темами"
+    USER_TURNIP = "🥕 Репка (в разработке)"
+    USER_HEAD_CHAT = "🐻 Чат по Animal Crossing"
+    USER_CHANEL = "📢 Канал по Animal Crossing"
+    USER_CHAT_NINTENDO = "🎮 Чат по Nintendo играм (+ оффтоп)"
     # Меню гайдов
     USER_GUIDE_SITE = "🌐 Перейти на сайт"
-    USER_FIND_GUIDE = "🔍 Поиск по ключевым словам"
+    USER_FIND_GUIDE = "🔍 Поиск гайдов (в разработке)"
     # Меню конкурсов
     USER_CONTEST_INFO = "ℹ️ Узнать про конкурс"
     USER_CONTEST_SEND = "🎨 Отправить работу"
     USER_CONTEST_JUDGE = "⚖️ Записаться на судейство"
     # Меню новостей
     USER_NEWS_NEWS = "📰 Отправить новость в газету"
-    USER_NEWS_CODE = "🔢 Отправить код сна или курортного-бюро"
+    USER_NEWS_CODE_DREAM = "🛏️ Отправить код сна"
+    USER_NEWS_CODE_DLC = "🏡 Отправить код курортного-бюро"
     USER_NEWS_POCKET = "👋 Отправить код дружбы в PocketCamp"
     USER_NEWS_DESIGN = "🎨 Отправить код кастомного дизайна"
 

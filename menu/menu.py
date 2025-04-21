@@ -170,16 +170,20 @@ class Menu:
                 callback_data=ButtonCallback.USER_NEWS_NEWS,
             ),
             types.InlineKeyboardButton(
-                text=ButtonText.USER_NEWS_CODE,
+                text=ButtonText.USER_NEWS_CODE_DREAM,
                 callback_data=ButtonCallback.USER_NEWS_CODE,
             ),
             types.InlineKeyboardButton(
-                text=ButtonText.USER_NEWS_POCKET,
-                callback_data=ButtonCallback.USER_NEWS_POCKET,
+                text=ButtonText.USER_NEWS_CODE_DLC,
+                callback_data=ButtonCallback.USER_NEWS_CODE,
             ),
             types.InlineKeyboardButton(
                 text=ButtonText.USER_NEWS_DESIGN,
                 callback_data=ButtonCallback.USER_NEWS_DESIGN,
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_POCKET,
+                callback_data=ButtonCallback.USER_NEWS_POCKET,
             ),
             types.InlineKeyboardButton(
                 text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
