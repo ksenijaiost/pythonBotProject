@@ -200,7 +200,7 @@ def handle_help(message):
         f"*{ButtonText.USER_CONTEST}* - всё о конкурсах:\n"
         f"*{ButtonText.USER_CONTEST_INFO}* - информация об актуальном конкурсе, правила и прошлые конкурсы,\n"
         f"*{ButtonText.USER_CONTEST_SEND}* - отправка работы для участия в конкурсе _(я поэтапно попрошу фото и текст работы)_,\n"
-        f"*{ButtonText.USER_CONTEST_JUDGE}* - запись на судейство _(перешлю Ваше желания админам)_;\n\n"
+        f"*{ButtonText.USER_CONTEST_JUDGE}* - _перешлю Ваше желания админам_;\n\n"
         f"*{ButtonText.USER_TO_ADMIN}* - отправка сообщения админам чата;\n"
         f"*{ButtonText.USER_TO_NEWS}* - отправка новостей и кодов сна, дач, дизайна и PocketCamp _(в зависимости от вида новости я поэтапно попрошу прислать всё необходимое)_;\n"
         f"*{ButtonText.USER_TURNIP}* - находится в разработке, _позже тут будет возможность продать репу админам по субботам_;\n"
