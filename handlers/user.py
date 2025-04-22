@@ -1089,7 +1089,7 @@ def preview_to_admin_chat(user_id, content_data):
     )
     bot.send_message(
         user_id,
-        f"Предпросмотр:\n{content_data["text"]}\n\nОтправить сообщение админам?",
+        f"Предпросмотр:\n{content_data['text']}\n\nОтправить сообщение админам?",
         reply_markup=markup,
     )
 
@@ -2087,7 +2087,7 @@ def handle_preview_actions_send_to_news_chat(call):
                 bot.send_media_group(target_chat, data["media"])
                 bot.send_message(
                     target_chat,
-                    text=f"Текст:\n{data['text']}\n\nИнфо о пользователе:\n{data["user_info"]}\n\nХотите ответить?",
+                    text=f"Текст:\n{data['text']}\n\nИнфо о пользователе:\n{data['user_info']}\n\nХотите ответить?",
                     reply_markup=markup,
                 )
 
