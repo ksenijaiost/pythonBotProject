@@ -68,7 +68,7 @@ def check_admin(call):
     if call.from_user.id not in admin_ids:
         bot.answer_callback_query(
             call.id,
-            "⚠️ Вы не являетесь админом! Вы вообще как сюда попали???",
+            "⚠️ Вы не являетесь админом\! Вы вообще как сюда попали???",
             show_alert=True,
         )
         return False
@@ -232,7 +232,7 @@ def handle_admin_input(message):
         except ValueError:
             bot.send_message(
                 message.chat.id,
-                "❌ Неверный формат! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)",
+                "❌ Неверный формат\! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)",
             )
             return
 
@@ -259,7 +259,7 @@ def handle_admin_input(message):
         storage.clear(user_id)
         bot.send_message(
             message.chat.id,
-            "✅ Данные обновлены!",
+            "✅ Данные обновлены\!",
             reply_markup=Menu.back_adm_contest_menu(),
         )
 
@@ -364,13 +364,13 @@ def process_rejection(message, submission_id):
         user_id = submission["user_id"]
         bot.send_message(
             user_id,
-            f"❌ Работа отклонена!\nПричина: {message.text}",
+            f"❌ Работа отклонена\!\nПричина: {message.text}",
             reply_markup=Menu.back_user_contest_menu(),
         )
 
         bot.edit_message_text(
             message.chat.id,
-            f"Работа #{submission_id} отклонена!",
+            f"Работа #{submission_id} отклонена\!",
             reply_markup=Menu.adm_menu(),
         )
 
@@ -458,7 +458,7 @@ def confirm_reset(call):
     )
 
     bot.edit_message_text(
-        text="✅ Счетчик участников сброшен!",
+        text="✅ Счетчик участников сброшен\!",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
@@ -573,12 +573,12 @@ def approve_work(call):
 
         bot.send_message(
             user_id,
-            f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
+            f"✅ Ваша работа одобрена\!\nНомер работы: #{number}",
             reply_markup=Menu.back_user_contest_menu(),
         )
 
         bot.edit_message_text(
-            f"Работа #{submission_id} одобрена как №{number}!",
+            f"Работа #{submission_id} одобрена как №{number}\!",
             call.message.chat.id,
             call.message.message_id,
             reply_markup=Menu.adm_menu(),

@@ -11,12 +11,12 @@ class Links:
         raw_username = os.getenv("CHAT_USERNAME")
 
         if not raw_username:
-            raise ValueError("CHAT_USERNAME отсутствует в .env!")
+            raise ValueError("CHAT_USERNAME отсутствует в .env\!")
 
         username = raw_username.lstrip("@")
 
         if not username.isalnum() or len(username) < 5:
-            raise ValueError("Некорректный CHAT_USERNAME! Пример: @my_chat")
+            raise ValueError("Некорректный CHAT_USERNAME\! Пример: @my_chat")
 
         return f"https://t.me/{username}"
 
@@ -25,12 +25,12 @@ class Links:
         raw_username = os.getenv("NINTENDO_CHAT")
 
         if not raw_username:
-            raise ValueError("NINTENDO_CHAT отсутствует в .env!")
+            raise ValueError("NINTENDO_CHAT отсутствует в .env\!")
 
         username = raw_username.lstrip("@")
 
         if not username.isalnum() or len(username) < 5:
-            raise ValueError("Некорректный NINTENDO_CHAT! Пример: @my_chat")
+            raise ValueError("Некорректный NINTENDO_CHAT\! Пример: @my_chat")
 
         return f"https://t.me/{username}"
 
@@ -39,11 +39,11 @@ class Links:
         raw_username = os.getenv("CHANNEL")
 
         if not raw_username:
-            raise ValueError("CHANNEL отсутствует в .env!")
+            raise ValueError("CHANNEL отсутствует в .env\!")
 
         username = raw_username.lstrip("@")
 
         if not username.isalnum() or len(username) < 5:
-            raise ValueError("Некорректный CHANNEL! Пример: @my_chat")
+            raise ValueError("Некорректный CHANNEL\! Пример: @my_chat")
 
         return f"https://t.me/{username}"

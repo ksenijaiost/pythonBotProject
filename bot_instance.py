@@ -10,6 +10,6 @@ load_dotenv()
 # Получаем токен
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
-    raise ValueError("Токен не найден в .env!")
+    raise ValueError("Токен не найден в .env\!")
 
 bot = telebot.TeleBot(TOKEN, state_storage=StateMemoryStorage())

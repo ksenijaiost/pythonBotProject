@@ -32,11 +32,11 @@ def start(message):
         if message.from_user.id in admin_ids:
             logger.debug(f"Admin detected - {user_id}")
             main_menu = Menu.adm_menu()
-            welcome_text = "Добро пожаловать, администратор! 👑"
+            welcome_text = "Добро пожаловать, администратор\! 👑"
         else:
             logger.debug(f"Regular user detected - {user_id}")
             main_menu = Menu.user_menu()
-            welcome_text = "Добро пожаловать! 😊"
+            welcome_text = "Добро пожаловать\! 😊"
 
         bot.send_message(
             message.chat.id,
