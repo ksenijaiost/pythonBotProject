@@ -10,8 +10,11 @@ from menu.constants import ButtonCallback
 from menu.menu import Menu
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
+    filename="bot.log",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.DEBUG,
 )
+
 
 # После нажатия старт - проверка в списке админов, выдача меню админа или пользователя
 @bot.message_handler(commands=["start"])
@@ -19,7 +22,7 @@ def start(message):
     try:
         logger = logging.getLogger(__name__)
         logger.debug(f"Start command from user: {message.from_user.id}")
-        
+
         # Принудительный сброс состояний
         user_id = message.from_user.id
         bot.delete_state(user_id)
@@ -47,8 +50,9 @@ def start(message):
         bot.send_message(
             message.chat.id,
             "⚠️ Произошла ошибка. Попробуйте еще раз.",
-            reply_markup=types.ReplyKeyboardRemove()
+            reply_markup=types.ReplyKeyboardRemove(),
         )
+
 
 # Обработчик кнопки "В главное меню" - проверка в списке админов, выдача меню админа или пользователя
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.MAIN_MENU)

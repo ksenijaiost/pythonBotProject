@@ -39,7 +39,9 @@ from threading import Lock
 from weakref import WeakValueDictionary
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
+    filename="bot.log",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.DEBUG,
 )
 
 
@@ -2083,7 +2085,7 @@ def handle_preview_actions_send_to_news_chat(call):
             # Отправка в целевой чат
             # Отправка медиагруппы
             if data["media"]:
-                logger.debug(f"Отправка медиагруппы из {len(data["media"])} элементов")
+                logger.debug(f"Отправка медиагруппы из {len(data['media'])} элементов")
                 bot.send_media_group(target_chat, data["media"])
                 bot.send_message(
                     target_chat,

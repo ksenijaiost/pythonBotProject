@@ -18,7 +18,9 @@ from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
+    filename="bot.log",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.DEBUG,
 )
 
 # storage.py
@@ -292,7 +294,9 @@ def show_stats(call):
         handle_admin_error(call.message.chat.id, e)
 
 
-@bot.callback_query_handler(func=lambda call: call.data ==  ButtonCallback.ADM_SHOW_PARTICIPANTS)
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.ADM_SHOW_PARTICIPANTS
+)
 def handle_show_participants(call):
     participants = SubmissionManager.get_all_submissions_with_info()
     if not participants:
@@ -324,7 +328,9 @@ def handle_show_participants(call):
     )
 
 
-@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_SHOW_JUDGES)
+@bot.callback_query_handler(
+    func=lambda call: call.data == ButtonCallback.ADM_SHOW_JUDGES
+)
 def handle_show_judges(call):
     judges = SubmissionManager.get_all_judges_with_info()
     if not judges:
