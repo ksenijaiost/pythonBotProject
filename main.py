@@ -38,7 +38,7 @@ def start(message):
         bot.send_message(
             message.chat.id,
             f"✨ {welcome_text}\nВыберите действие:",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_markup=main_menu,
         )
 

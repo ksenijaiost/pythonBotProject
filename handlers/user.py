@@ -228,7 +228,7 @@ def handle_help(message):
     bot.send_message(
         user_id,
         help_text,
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
         reply_markup=markup,
         disable_web_page_preview=True,
     )
@@ -375,7 +375,7 @@ def handle_user_contest_info(call):
             message_id=call.message.message_id,
             text=text,
             reply_markup=markup,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
         )
 
     except Exception as e:
@@ -527,7 +527,7 @@ def handle_work_submission(message):
         bot.send_message(
             user_id,
             "📝 Теперь отправьте текст для работы (описание, название и т.д.):\n_Пишите его тут в чате_\n🚫 Для отмены используйте /cancel",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
         )
     except Exception as e:
         handle_submission_error(user_id, e)
@@ -556,7 +556,7 @@ def handle_group_completion(user_id):
         bot.send_message(
             user_id,
             "📝 Теперь отправьте текст для работы:\n_Пишите его тут в чате_\n🚫 Для отмены используйте /cancel",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
         )
 
 
@@ -749,7 +749,7 @@ def handle_contest_judje(call):
         '⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса - 🚫_для отмены ранее поданной заявки напишите выберите "сообщение админам" в главном меню._',
         call.message.chat.id,
         call.message.message_id,
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
         reply_markup=markup,
     )
 
@@ -885,7 +885,7 @@ def handle_user_to_admin(call):
         call.message.chat.id,
         "📤 Пришлите текст, который хотели бы отправить админам (о фото я спрошу позже)\n_Пишите текст тут в чате_\n"
         "🚫 Для отмены используйте /cancel",
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
     )
 
 
@@ -1245,7 +1245,7 @@ def handle_news_code(call):
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
     )
 
 
@@ -1265,7 +1265,7 @@ def handle_news_code(call):
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
     )
 
 
@@ -1645,7 +1645,7 @@ def handle_media_group(message, data, user_id):
         bot.send_message(
             user_id,
             "❌ _Вы уже отправили 1 фото ранее, а сейчас отправляете ещё несколько!_\nПришлите второе фото заново!",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
         )
         # Устанавливаем таймер для очистки кэша (5 минут)
         threading.Timer(

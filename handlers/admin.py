@@ -149,7 +149,7 @@ def start_contest_update(call):
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
             text=text,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_markup=markup,
         )
 
@@ -173,8 +173,6 @@ def handle_cancel_update(call):
 # Обработчик сброса данных
 @bot.callback_query_handler(func=lambda call: call.data == "reset_info")
 def handle_reset_info(call):
-    if not check_admin(call):
-        return
     markup = types.InlineKeyboardMarkup()
     text = "Точно очистить данные с информацией о текущем конкурсе?"
     markup.row(
@@ -187,7 +185,7 @@ def handle_reset_info(call):
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=text,
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
         reply_markup=markup,
     )
 
@@ -208,8 +206,6 @@ def handle_reset_info(call):
 def start_contest_update(call):
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
-    if call.message.chat.id not in admin_ids:
-        return
     storage.set_user_step(call.from_user.id, "theme")
     bot.send_message(call.message.chat.id, ADMIN_STEPS["theme"])
 
@@ -218,8 +214,6 @@ def start_contest_update(call):
     func=lambda m: storage.get_user_step(m.from_user.id) in ADMIN_STEPS
 )
 def handle_admin_input(message):
-    if message.from_user.id not in admin_ids:
-        return
     user_id = message.from_user.id
     current_step = storage.get_user_step(user_id)
 
@@ -300,16 +294,13 @@ def show_stats(call):
 
 @bot.callback_query_handler(func=lambda call: call.data ==  ButtonCallback.ADM_SHOW_PARTICIPANTS)
 def handle_show_participants(call):
-    if not check_admin(call):
-        return
-
     participants = SubmissionManager.get_all_submissions_with_info()
     if not participants:
         bot.edit_message_text(
             text=("❌ Нет данных об участниках"),
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            parse_mode="MarkdownV2",
+            parse_mode="MarkdownV2V2",
             reply_markup=Menu.adm_stat_menu(),
         )
         return
@@ -328,23 +319,20 @@ def handle_show_participants(call):
         text=text,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="MarkdownV2",
+        parse_mode="MarkdownV2V2",
         reply_markup=Menu.adm_stat_menu(),
     )
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_SHOW_JUDGES)
 def handle_show_judges(call):
-    if not check_admin(call):
-        return
-
     judges = SubmissionManager.get_all_judges_with_info()
     if not judges:
         bot.edit_message_text(
             text=("❌ Нет данных о судьях"),
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            parse_mode="MarkdownV2",
+            parse_mode="MarkdownV2V2",
             reply_markup=Menu.adm_stat_menu(),
         )
         return
@@ -357,7 +345,7 @@ def handle_show_judges(call):
         text=text,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="MarkdownV2",
+        parse_mode="MarkdownV2V2",
         reply_markup=Menu.adm_stat_menu(),
     )
 
@@ -393,7 +381,7 @@ def handle_admin_error(chat_id, error):
     )
 
     try:
-        bot.send_message(chat_id, error_msg, parse_mode="Markdown")
+        bot.send_message(chat_id, error_msg, parse_mode="MarkdownV2")
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.error(f"Не удалось отправить сообщение об ошибке: {e}")
