@@ -329,7 +329,7 @@ def handle_user_contest_info(call):
             text = (
                 "🎉 В настоящее время активных конкурсов нет.\nСледите за обновлениями\!"
             )
-            markup = Menu.back_to_main_menu()
+            Menu.back_user_contest_menu()
         else:
             current_date = datetime.now().date()
             end_date_obj = datetime.strptime(contest[4], "%d.%m.%Y").date()
