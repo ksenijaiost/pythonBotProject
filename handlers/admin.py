@@ -650,7 +650,7 @@ def handle_reply_button(call):
 
         msg = bot.send_message(
             call.message.chat.id,  # Отвечаем в тот же чат
-            f"✍️ Введите ответ для пользователя:\n🚫 Для отмены используйте /cancel",
+            f"✍️ Введите ответ для пользователя:\n🚫 Для отмены используйте /cancel_adm",
         )
         
         # Регистрируем следующий шаг с явным указанием чата
@@ -664,7 +664,7 @@ def handle_reply_button(call):
         bot.answer_callback_query(call.id, "❌ Ошибка", show_alert=True)
 
 
-@bot.message_handler(commands=["cancel"])
+@bot.message_handler(commands=["cancel_adm"])
 def cancel_reply(call):
     if call.message.chat.id in admin_replies:
         del admin_replies[call.message.chat.id]
