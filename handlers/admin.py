@@ -2,6 +2,7 @@ import logging
 from venv import logger
 from datetime import datetime
 import traceback
+from functools import partial
 from telebot import types
 from telebot.apihelper import ApiTelegramException
 
@@ -59,8 +60,8 @@ storage = TempStorage()
 ADMIN_STEPS = {
     "theme": "Введите тему конкурса:",
     "description": "Введите описание:",
-    "contest_date": "Введите дату проведения конкурса (ДД.ММ.ГГГГ):",
-    "end_date_of_admission": "Введите дату окончания приёма работ (ДД.ММ.ГГГГ):",
+    "contest_date": "Введите дату проведения конкурса \(ДД.ММ.ГГГГ\):",
+    "end_date_of_admission": "Введите дату окончания приёма работ \(ДД.ММ.ГГГГ\):",
 }
 
 
@@ -84,7 +85,7 @@ def handle_adm_contest(call):
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
-        "Меню конкурсов (адм). Выберите действие:",
+        "Меню конкурсов \(адм\). Выберите действие:",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
@@ -232,7 +233,7 @@ def handle_admin_input(message):
         except ValueError:
             bot.send_message(
                 message.chat.id,
-                "❌ Неверный формат\! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)",
+                "❌ Неверный формат\! Используйте ДД.ММ.ГГГГ \(например: 31.12.2024\)",
             )
             return
 
@@ -444,7 +445,7 @@ def confirm_reset(call):
         f"количество отвергнутых работ: {SubmissionManager.get_rejected_count()}/0"
     )
     logger.debug(
-        f"текущее количество участников (всего): {SubmissionManager.get_current_number()}/0"
+        f"текущее количество участников \(всего\): {SubmissionManager.get_current_number()}/0"
     )
     logger.debug(
         f"количество подавших заявку на судейство: {SubmissionManager.get_judges_count()}/0"
@@ -644,27 +645,39 @@ def handle_reply_button(call):
         user_id = int(call.data.split("_")[-1])
         bot.answer_callback_query(call.id)
 
-        # Сохраняем связь админ -> пользователь
-        admin_replies[call.from_user.id] = user_id
+        # Сохраняем связь админ -> пользователь !с привязкой к chat.id админа
+        admin_replies[call.message.chat.id] = user_id # <-- Ключом выступает chat.id!
 
         msg = bot.send_message(
-            call.message.chat.id,
-            f"✍️ Введите ответ для пользователя:",
+            call.message.chat.id,  # Отвечаем в тот же чат
+            f"✍️ Введите ответ для пользователя:\n🚫 Для отмены используйте /cancel",
         )
-        bot.register_next_step_handler(msg, process_admin_reply)
+        
+        # Регистрируем следующий шаг с явным указанием чата
+        bot.register_next_step_handler(
+            message=msg,
+            callback=partial(process_admin_reply, chat_id=call.message.chat.id)
+        )
 
     except Exception as e:
         logger.error(f"Reply error: {e}")
         bot.answer_callback_query(call.id, "❌ Ошибка", show_alert=True)
 
 
-def process_admin_reply(message):
+@bot.message_handler(commands=["cancel"])
+def cancel_reply(call):
+    if call.message.chat.id in admin_replies:
+        del admin_replies[call.message.chat.id]
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    bot.answer_callback_query(call.id, "Ответ отменён")
+
+def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id как параметр
     try:
-        # Получаем user_id из хранилища
-        user_id = admin_replies.get(message.from_user.id)
+        # Получаем user_id из хранилища по chat_id
+        user_id = admin_replies.get(chat_id)
 
         if not user_id:
-            bot.send_message(message.chat.id, "❌ Сессия ответа устарела")
+            bot.send_message(chat_id, "❌ Сессия ответа устарела")
             return
 
         bot.send_message(
@@ -673,16 +686,18 @@ def process_admin_reply(message):
             reply_markup=Menu.user_to_admin_or_main_menu(),
         )
         bot.send_message(
-            message.chat.id,
+            chat_id,
             f"✅ Ответ отправлен пользователю",
             reply_markup=Menu.adm_menu(),
         )
 
         # Очищаем хранилище после отправки
-        del admin_replies[message.from_user.id]
+        if chat_id in admin_replies:
+            del admin_replies[chat_id]
 
     except ApiTelegramException as e:
+        logger.error(f"Process reply error: {e}")
         if e.description == "Forbidden: bot was blocked by the user":
-            bot.send_message(message.chat.id, "❌ Пользователь заблокировал бота")
+            bot.send_message(chat_id, "❌ Пользователь заблокировал бота")
         else:
             raise
