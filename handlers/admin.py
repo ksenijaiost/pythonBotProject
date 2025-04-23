@@ -60,8 +60,8 @@ storage = TempStorage()
 ADMIN_STEPS = {
     "theme": "Введите тему конкурса:",
     "description": "Введите описание:",
-    "contest_date": "Введите дату проведения конкурса (ДД.ММ.ГГГГ):",
-    "end_date_of_admission": "Введите дату окончания приёма работ (ДД.ММ.ГГГГ):",
+    "contest_date": "Введите дату проведения конкурса (через точку ДД ММ ГГГГ):",
+    "end_date_of_admission": "Введите дату окончания приёма работ (через точку ДД ММ ГГГГ):",
 }
 
 
@@ -85,7 +85,7 @@ def handle_adm_contest(call):
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
-        "Меню конкурсов (адм). Выберите действие:",
+        "Меню конкурсов (адм)\nВыберите действие:",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
@@ -139,7 +139,7 @@ def start_contest_update(call):
                 ),
             )
         else:
-            text += "⚠️ Активных конкурсов не найдено.\nХотите создать новый?"
+            text += "⚠️ Активных конкурсов не найдено\nХотите создать новый?"
             markup.row(
                 types.InlineKeyboardButton(
                     "➕ Создать новый", callback_data="confirm_update"
@@ -233,7 +233,7 @@ def handle_admin_input(message):
         except ValueError:
             bot.send_message(
                 message.chat.id,
-                "❌ Неверный формат! Используйте ДД.ММ.ГГГГ (например: 31.12.2024)",
+                "❌ Неверный формат! Используйте через точку ДД ММ ГГГГ _(например: 31точка12точка2024)_",
             )
             return
 
@@ -305,7 +305,7 @@ def handle_show_participants(call):
             text=("❌ Нет данных об участниках"),
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            parse_mode="MarkdownV2V2",
+            parse_mode="MarkdownV2",
             reply_markup=Menu.adm_stat_menu(),
         )
         return
@@ -324,7 +324,7 @@ def handle_show_participants(call):
         text=text,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="MarkdownV2V2",
+        parse_mode="MarkdownV2",
         reply_markup=Menu.adm_stat_menu(),
     )
 
@@ -339,7 +339,7 @@ def handle_show_judges(call):
             text=("❌ Нет данных о судьях"),
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            parse_mode="MarkdownV2V2",
+            parse_mode="MarkdownV2",
             reply_markup=Menu.adm_stat_menu(),
         )
         return
@@ -352,7 +352,7 @@ def handle_show_judges(call):
         text=text,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="MarkdownV2V2",
+        parse_mode="MarkdownV2",
         reply_markup=Menu.adm_stat_menu(),
     )
 
