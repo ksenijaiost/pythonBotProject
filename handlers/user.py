@@ -68,8 +68,8 @@ def is_user_blocked(call):
             "⚠️ Вы заблокированы ботом\nЕсли считаете это ошибкой, свяжитесь с админами чата",
             show_alert=True,
         )
-        return False
-    return True
+        return True
+    return False
 
 
 # Система блокировки ввода

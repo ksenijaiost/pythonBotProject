@@ -788,7 +788,7 @@ def handle_block_user(call):
         bot.answer_callback_query(call.id, "❌ Ошибка блокировки")
 
 
-@bot.callback_query_handler(func=lambda call: call.data == "show_blocked_users")
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_BLOCK)
 def handle_show_blocked_users(call):
     try:
         users = SubmissionManager.select_blocked()
@@ -797,8 +797,8 @@ def handle_show_blocked_users(call):
 
         text = "🚫 Заблокированные пользователи:\n\n"
         for user in users:
-            text += f"👤 {escape_markdown(user[2])}\n"
-            text += f"🔗 @{escape_markdown(user[1]) if user[1] else 'нет'}\n"
+            text += f"👤 {user[2]}\n"
+            text += f"🔗 @{user[1] if user[1] else 'нет'}\n"
             text += f"🆔 ID: `{user[0]}`\n"
             text += f"⏱ {user[3]}\n"
             markup.add(

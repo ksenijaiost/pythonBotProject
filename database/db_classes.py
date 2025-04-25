@@ -371,7 +371,7 @@ class SubmissionManager:
 
     @staticmethod
     def insert_replace_blocked(user_id, username, first_name, last_name):
-        full_name = first_name + " " + last_name
+        full_name = f"{first_name or ''} {last_name or ''}".strip()
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
@@ -400,8 +400,8 @@ class SubmissionManager:
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
-            c.execute("""SELECT 1 FROM blocked_users WHERE user_id = ?""", (user_id,))
-            return c.fetchall() is not None
+            c.execute("SELECT 1 FROM blocked_users WHERE user_id = ?", (user_id,))
+            return c.fetchone() is not None
         finally:
             conn.close
 
