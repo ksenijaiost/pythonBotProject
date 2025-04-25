@@ -5,6 +5,7 @@ import traceback
 from functools import partial
 from telebot import types
 from telebot.apihelper import ApiTelegramException
+from telegram.helpers import escape_markdown
 
 from database.contest import (
     ContestManager,
@@ -109,10 +110,13 @@ def start_contest_update(call):
         markup = types.InlineKeyboardMarkup()
 
         if contest:
-            theme = contest[1]
-            description = contest[2]
-            contest_date = contest[3]
-            end_date_of_admission = contest[4]
+            # Экранируем все динамические данные
+            theme = escape_markdown(contest[1], version=2)
+            description = escape_markdown(contest[2], version=2)
+            
+            # Экранируем даты с точками
+            contest_date = escape_markdown(contest[3], version=2)
+            end_date_of_admission = escape_markdown(contest[4], version=2)
 
             text += (
                 f"🏷 Тема: {theme}\n"
