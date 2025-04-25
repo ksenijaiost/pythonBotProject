@@ -60,8 +60,8 @@ storage = TempStorage()
 ADMIN_STEPS = {
     "theme": "Введите тему конкурса:",
     "description": "Введите описание:",
-    "contest_date": "Введите дату проведения конкурса \(через точку ДД ММ ГГГГ\):",
-    "end_date_of_admission": "Введите дату окончания приёма работ \(через точку ДД ММ ГГГГ\):",
+    "contest_date": "Введите дату проведения конкурса, через точку ДД ММ ГГГГ:",
+    "end_date_of_admission": "Введите дату окончания приёма работ, через точку ДД ММ ГГГГ:",
 }
 
 
@@ -69,7 +69,7 @@ def check_admin(call):
     if call.from_user.id not in admin_ids:
         bot.answer_callback_query(
             call.id,
-            "⚠️ Вы не являетесь админом\! Вы вообще как сюда попали???",
+            "⚠️ Вы не являетесь админом\n\nВы вообще как сюда попали???",
             show_alert=True,
         )
         return False
@@ -85,7 +85,7 @@ def handle_adm_contest(call):
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
-        "Меню конкурсов \(адм\)\nВыберите действие:",
+        "Меню конкурсов администратора\nВыберите действие:",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
@@ -233,7 +233,7 @@ def handle_admin_input(message):
         except ValueError:
             bot.send_message(
                 message.chat.id,
-                "❌ Неверный формат\! Используйте через точку ДД ММ ГГГГ _\(например: 31точка12точка2024\)_",
+                "❌ Неверный формат! Используйте через точку ДД ММ ГГГГ",
             )
             return
 
