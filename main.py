@@ -32,11 +32,11 @@ def start(message):
         if message.from_user.id in admin_ids:
             logger.debug(f"Admin detected - {user_id}")
             main_menu = Menu.adm_menu()
-            welcome_text = "Добро пожаловать, администратор! 👑"
+            welcome_text = "Добро пожаловать, администратор👑"
         else:
             logger.debug(f"Regular user detected - {user_id}")
             main_menu = Menu.user_menu()
-            welcome_text = "Добро пожаловать! 😊"
+            welcome_text = "Добро пожаловать😊"
 
         bot.send_message(
             message.chat.id,
@@ -49,7 +49,7 @@ def start(message):
         logger.error(f"Start command error: {str(e)}")
         bot.send_message(
             message.chat.id,
-            "⚠️ Произошла ошибка. Попробуйте еще раз.",
+            "⚠️ Произошла ошибка\nПопробуйте еще раз",
             reply_markup=types.ReplyKeyboardRemove(),
         )
 
@@ -64,7 +64,7 @@ def handle_back(call):
     else:
         main_menu = Menu.user_menu()
     bot.edit_message_text(
-        "Главное меню. Выберите действие::",
+        "Главное меню\nВыберите действие::",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=main_menu,
