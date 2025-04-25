@@ -5,6 +5,7 @@ import os
 from threading import Lock
 import time
 
+from menu.constants import UserState
 
 class ContestManager:
     def _init_db():
@@ -118,8 +119,8 @@ class SubmissionManager:
             c.execute(
                 """INSERT INTO submissions 
                     (user_id, username, full_name, photos, caption, timestamp)
-                    VALUES (?, ?, ?, ?, ?, datetime('now'))""",
-                (user_id, username, full_name, json.dumps(photos), caption),
+                    VALUES (?, ?, ?, ?, ?, ?)""",
+                (user_id, username, full_name, json.dumps(photos), caption, datetime.now().isoformat()),
             )
             submission_id = c.lastrowid
             conn.commit()
@@ -352,16 +353,59 @@ class SubmissionManager:
             conn.close()
 
 
+class ContestSubmission:
+    def __init__(self):
+        self.photos = []  # Список словарей {"file_id": str, "unique_id": str}
+        self.caption = ""  # Подпись к работе
+        self.media_group_id = None  # ID медиагруппы (для альбомов)
+        self.submission_time = time.time()  # Время начала отправки
+        self.status = (
+            UserState.WAITING_CONTEST_PHOTOS
+        )  # collecting_photos → waiting_text → preview
+        self.send_by_bot = None  # True/False
+        self.last_media_time = time.time()  # Время последнего фото в группе
+        self.group_check_timer = None  # Таймер проверки завершения группы
+        self.progress_message_id = None  # ID сообщения с прогресс-баром
+        self.last_activity = time.time()  # Добавляем недостающий атрибут
+
+    def cancel_timer(self):
+        if self.group_check_timer:
+            self.group_check_timer.cancel()
+
+    # Добавим метод для обновления времени активности
+    def update_activity(self):
+        self.last_activity = time.time()
+        
+
 class SubmissionStorage:
     def __init__(self):
         self.data = {}
         self.lock = Lock()
         self.timers = {}
+    
+    def update_activity(self):
+        self.last_activity = time.time()
 
     def add(self, user_id, submission):
         with self.lock:
+            if not hasattr(submission, 'update_activity'):
+                raise TypeError("Invalid submission type")
             self.data[user_id] = submission
-            self.timers[user_id] = time.time()
+            # Используем метод обновления активности
+            submission.update_activity()
+            self.timers[user_id] = submission.last_activity  # Используем last_activity из Submission
+    
+    # Добавляем новые методы для работы с прогрессом
+    def update_progress_message(self, user_id, message_id):
+        with self.lock:
+            if user_id in self.data:
+                self.data[user_id].progress_message_id = message_id
+
+    def update_last_activity(self, user_id):
+        with self.lock:
+            if user_id in self.data:
+                self.data[user_id].last_activity = time.time()
+                self.timers[user_id] = self.data[user_id].last_activity
 
     def get(self, user_id):
         with self.lock:
@@ -407,17 +451,24 @@ def get_submission(submission_id):
         if not result:
             raise ValueError(f"Заявка {submission_id} не найдена")
 
+        # Десериализуем JSON-строку в список словарей
+        photos = json.loads(result[4]) if result[4] else []
+
         return {
             "id": result[0],
             "user_id": result[1],
-            "photos": json.loads(result[2]),
-            "caption": result[3],
-            "status": result[4],
-            "reason": result[5],
-            "submission_number": result[6],
-            "timestamp": result[7],
+            "username": result[2],
+            "full_name": result[3],
+            "photos": photos,
+            "caption": result[5],
+            "status": result[6],
+            "reason": result[7],
+            "submission_number": result[8],
+            "timestamp": result[9],
         }
-
+    except json.JSONDecodeError as e:
+        print(f"Ошибка декодирования JSON: {e}")
+        return {"photos": []}  # Возвращаем пустой список при ошибке
     except Exception as e:
         raise e
     finally:

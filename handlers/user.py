@@ -9,6 +9,7 @@ from telebot import types
 import time
 from database.contest import (
     ContestManager,
+    ContestSubmission,
     SubmissionManager,
     is_user_approved,
     user_submissions,
@@ -135,7 +136,7 @@ def lock_input(allow_media_groups: bool = False):
             else:
                 if not user_locks.acquire(user_id):
                     error_msg = (
-                        "⏳ Пожалуйста, дождитесь завершения предыдущей операции!"
+                        "⏳ Пожалуйста, дождитесь завершения предыдущей операции\!"
                     )
                     if hasattr(message_or_call, "message"):
                         bot.answer_callback_query(message_or_call.id, error_msg)
@@ -198,34 +199,38 @@ def handle_help(message):
     # Отправляем помощь, НЕ сбрасывая состояние
     help_text = (
         "❓ *Помощь по боту*\n\n\n"
-        f"*{ButtonText.USER_GUIDES}* - гайды по Animal Crossing и не только;\n\n"
-        f"*{ButtonText.USER_CONTEST}* - всё о конкурсах:\n"
-        f"*{ButtonText.USER_CONTEST_INFO}* - информация об актуальном конкурсе, правила и прошлые конкурсы,\n"
-        f"*{ButtonText.USER_CONTEST_SEND}* - отправка работы для участия в конкурсе _(я поэтапно попрошу фото и текст работы)_,\n"
-        f"*{ButtonText.USER_CONTEST_JUDGE}* - _перешлю Ваше желания админам_;\n\n"
-        f"*{ButtonText.USER_TO_ADMIN}* - отправка сообщения админам чата;\n"
-        f"*{ButtonText.USER_TO_NEWS}* - отправка новостей и кодов сна, дач, дизайна и PocketCamp _(в зависимости от вида новости я поэтапно попрошу прислать всё необходимое)_;\n"
-        f"*{ButtonText.USER_TURNIP}* - находится в разработке, _позже тут будет возможность продать репу админам по субботам_;\n"
-        f"*{ButtonText.USER_HEAD_CHAT}* - ссылка на чатик по Animal Crossing;\n"
-        f"*{ButtonText.USER_CHANEL}* - ссылка на канал с ежедневными новостями, анонсами, идеями и другими полезностями;\n"
-        f"*{ButtonText.USER_CHAT_NINTENDO}* - ссылка на чат, разделённый на темы по играм Nintendo, а также отдельной оффтоп-темой.\n"
-        f"📚 Полная инструкция [на нашем сайте]({ConstantLinks.HELP_LINK})"
+        f"*{ButtonText.USER_GUIDES}*: гайды по Animal Crossing и не только;\n\n"
+        f"*{ButtonText.USER_CONTEST}*: всё о конкурсах:\n"
+        f"*{ButtonText.USER_CONTEST_INFO}*: информация об актуальном конкурсе, правила и прошлые конкурсы,\n"
+        f"*{ButtonText.USER_CONTEST_SEND}*: отправка работы для участия в конкурсе,\n"
+        f"*{ButtonText.USER_CONTEST_JUDGE}*: _перешлю Ваше желания админам_;\n\n"
+        f"*{ButtonText.USER_TO_ADMIN}*: отправка сообщения админам чата;\n"
+        f"*{ButtonText.USER_TO_NEWS}*: отправка новостей и кодов сна, дач, дизайна и PocketCamp;\n"
+        f"*{ButtonText.USER_TURNIP}*: находится в разработке, _позже тут будет возможность продать репу админам по субботам_;\n"
+        f"*{ButtonText.USER_HEAD_CHAT}*: ссылка на чатик по Animal Crossing;\n"
+        f"*{ButtonText.USER_CHANEL}*: ссылка на канал с ежедневными новостями, анонсами, идеями и другими полезностями;\n"
+        f"*{ButtonText.USER_CHAT_NINTENDO}*: ссылка на чат, разделённый на темы по играм Nintendo, а также отдельной оффтоп темой"
     )
 
     markup = types.InlineKeyboardMarkup()
+    markup.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.USER_HELP_SITE, url=ConstantLinks.HELP_LINK
+            )
+        )
     # Добавляем кнопку "В главное меню" только если нет активного состояния
     if current_state:
-        help_text += "\n\n Можете продолжить выполнение предыдущих действий.\n"
-        help_text += (
-            "🚫 Для отмены действия и возврата в главное меню нажмите /cancel\n"
-        )
-        help_text += "🔄 Для рестарта бота можете нажать команду /start _(сбросится то, что Вы делали, бот перезапустится)_"
+        help_text += "\n\n Можете продолжить выполнение предыдущих действий\n\n"
+        help_text += "🚫 Для отмены действия и возврата в главное меню нажмите /cancel\n"
+        help_text += "🔄 Для рестарта бота можете нажать команду /start, _сбросится то, что Вы делали, а бот перезапустится_"
     else:
         markup.add(
             types.InlineKeyboardButton(
                 text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
             )
         )
+
+    help_text += "\n\n📚 Полная инструкция на нашем сайте доступна по кнопке ниже"
 
     bot.send_message(
         user_id,
@@ -245,7 +250,7 @@ def handle_user_guides(call):
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
-        "Меню гайдов. Выберите действие:",
+        "Меню гайдов\nВыберите действие:",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=Menu.guides_menu(),
@@ -327,7 +332,7 @@ def handle_user_contest_info(call):
         if not contest:
             # Если конкурсов нет в базе
             text = (
-                "🎉 В настоящее время активных конкурсов нет\nСледите за обновлениями!"
+                "🎉 В настоящее время активных конкурсов нет\nСледите за обновлениями\!"
             )
             markup = Menu.back_user_contest_menu()
         else:
@@ -341,7 +346,7 @@ def handle_user_contest_info(call):
             end_date_of_admission = format_date_ru(contest[4])
 
             text = (
-                f"🏆 *Актуальный конкурс!*\n\n"
+                f"🏆 *Актуальный конкурс*\n\n"
                 f"📌 *Тема:* {theme}\n"
                 f"📝 *Описание:* {description}\n\n"
                 f"🗓 *Даты:*\n"
@@ -351,9 +356,9 @@ def handle_user_contest_info(call):
 
             # Добавляем предупреждение если срок подачи истёк
             if end_date_obj < current_date:
-                text += "❗️*Приём работ на конкурс завершён*! _Следите за обновлениями_!\n\n"
+                text += "❗️*Приём работ на конкурс завершён\!* _Следите за обновлениями_\!\n\n"
 
-            text += "Можете ознакомиться с правилами участия _(и списком предыдущих конкурсов)_ по ссылке:"
+            text += "Можете ознакомиться с правилами участия _\(и списком предыдущих конкурсов\)_ по ссылке:"
 
             # Создаем клавиатуру
             markup = types.InlineKeyboardMarkup()
@@ -391,24 +396,6 @@ def handle_user_contest_info(call):
 SUBMISSION_TIMEOUT = 300  # 5 минут на подтверждение
 
 
-class ContestSubmission:
-    def __init__(self):
-        self.photos = []  # Список ID фотографий
-        self.caption = ""  # Подпись к работе
-        self.media_group_id = None  # ID медиагруппы (для альбомов)
-        self.submission_time = time.time()  # Время начала отправки
-        self.status = (
-            UserState.WAITING_CONTEST_PHOTOS
-        )  # collecting_photos → waiting_text → preview
-        self.send_by_bot = None  # True/False
-        self.last_media_time = time.time()  # Время последнего фото в группе
-        self.group_check_timer = None  # Таймер проверки завершения группы
-
-    def cancel_timer(self):
-        if self.group_check_timer:
-            self.group_check_timer.cancel()
-
-
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_CONTEST_SEND,
 )
@@ -426,7 +413,7 @@ def start_contest_submission(call):
             # Если конкурсов нет в базе
             bot.answer_callback_query(
                 call.id,
-                "🎉 В настоящее время активных конкурсов нет\nСледите за обновлениями!",
+                "🎉 В настоящее время активных конкурсов нет\n\nСледите за обновлениями\!",
                 show_alert=True,
             )
             return
@@ -436,7 +423,7 @@ def start_contest_submission(call):
             if end_date_obj < current_date:
                 bot.answer_callback_query(
                     call.id,
-                    "❗️Приём работ на конкурс завершён! Следите за обновлениями!",
+                    "❗️Приём работ на конкурс завершён\! Следите за обновлениями\!",
                     show_alert=True,
                 )
                 return
@@ -445,7 +432,7 @@ def start_contest_submission(call):
             if user_submissions.exists(user_id) or is_user_approved(user_id):
                 bot.answer_callback_query(
                     call.id,
-                    "⚠️ Вы уже отправляли работу! Если хотите изменить работу, свяжитесь с админами",
+                    "⚠️ Вы уже отправляли работу\n\nЕсли хотите изменить работу, свяжитесь с админами",
                     show_alert=True,
                 )
                 return
@@ -454,15 +441,19 @@ def start_contest_submission(call):
             if not is_user_in_chat(call.from_user.id):
                 bot.send_message(
                     call.message.chat.id,
-                    "❌ Для участия в конкурсе необходимо состоять в нашем чате!\n"
+                    "❌ Для участия в конкурсе необходимо состоять в нашем чате\n"
                     + Links.get_chat_url(),
                     reply_markup=Menu.contests_menu(),
                 )
                 return
 
             user_id = call.from_user.id
-            user_submissions.add(user_id, ContestSubmission())
-            text = "📸 Пришлите работу (до 10 фото без текста - его я попрошу позже)\n"
+            submission = ContestSubmission()
+            bot.set_state(user_id, UserState.WAITING_CONTEST_PHOTOS)
+            submission.status = UserState.WAITING_CONTEST_PHOTOS  # Устанавливаем начальный статус
+            user_submissions.add(user_id, submission)
+
+            text = "📸 Пришлите работу _до 10 фото без текста, его я попрошу позже_\n"
 
             if SubmissionManager.delete_judge(user_id):
                 text += "\nВы будете удалены из списка судей"
@@ -472,6 +463,7 @@ def start_contest_submission(call):
             bot.send_message(
                 call.message.chat.id,
                 text,
+                parse_mode="MarkdownV2",
             )
 
     except Exception as e:
@@ -481,85 +473,121 @@ def start_contest_submission(call):
 
 
 # Обработчик отправки работ
-# Обработчик для приёма фото
+# Обработчик для приёма фото конкурсных работ
 @bot.message_handler(
     content_types=["photo"],
     func=lambda m: user_submissions.exists(m.from_user.id)
     and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_PHOTOS,
 )
 @lock_input(allow_media_groups=True)
-def handle_work_submission(message):
+def handle_contest_photos(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
+    
+    # Обновляем активность
+    submission.update_activity()
+    user_submissions.update_last_activity(user_id)
 
     try:
-        # Обработка медиагруппы
-        if message.media_group_id:
-            submission.cancel_timer()
+        # Удаляем предыдущее сообщение с прогрессом
+        if submission.progress_message_id:
+            try:
+                bot.delete_message(message.chat.id, submission.progress_message_id)
+            except Exception as e:
+                logger.warning(f"Не удалось удалить сообщение: {e}")
 
-            if submission.media_group_id != message.media_group_id:
-                submission.media_group_id = message.media_group_id
-                submission.photos = []
+        # Получаем оригинальное фото (последний элемент всегда наибольший)
+        original_photo = message.photo[-1]
+        unique_id = original_photo.file_unique_id
 
-            largest_photo = max(message.photo, key=lambda p: p.file_size)
-            submission.photos.append(largest_photo.file_id)
-            submission.last_media_time = time.time()
-
-            # Запускаем новый таймер
-            submission.group_check_timer = threading.Timer(
-                1.5, handle_group_completion, args=[user_id]  # 1.5 секунды ожидания
-            )
-            submission.group_check_timer.start()
-
+        # Проверка дубликатов
+        existing_ids = {p["unique_id"] for p in submission.photos}
+        if unique_id in existing_ids:
+            bot.reply_to(message, "❌ Это фото уже было добавлено!")
             return
-
-        # Одиночное фото
-        else:
-            largest_photo = max(message.photo, key=lambda p: p.file_size)
-            submission.photos.append(largest_photo.file_id)
 
         # Проверка лимита
-        if len(submission.photos) > 10:
-            bot.reply_to(message, "❌ Максимум 10 фото!")
-            user_submissions.remove(user_id)
+        if len(submission.photos) >= 10:
+            bot.reply_to(message, "❌ Достигнут максимум 10 фото!")
+            request_contest_description(user_id)
             return
 
-        # Переходим к получению текста
-        submission.status = UserState.WAITING_CONTEST_TEXT
-        bot.send_message(
-            user_id,
-            "📝 Теперь отправьте текст для работы (описание, название и тд):\n_Пишите его тут в чате_\n🚫 Для отмены используйте /cancel",
-            parse_mode="MarkdownV2",
-        )
+        # Сохраняем данные
+        submission.photos.append({
+            "file_id": original_photo.file_id,
+            "unique_id": unique_id
+        })
+
+        # Обновляем таймер последней активности
+        submission.last_activity = time.time()
+
+        # Автопереход при достижении лимита
+        if len(submission.photos) == 10:
+            request_contest_description(user_id)
+        else:
+            # Формируем прогресс-бар
+            progress_bar = "🟪" * len(submission.photos) + "◻️" * (10 - len(submission.photos))
+            
+            # Отправляем обновлённое сообщение
+            sent_msg = bot.reply_to(
+                message,
+                f"{progress_bar}\n"
+                f"✅ Фото добавлено! Всего: {len(submission.photos)}/10\n"
+                "Отправьте еще фото или нажмите /done\n\n"
+                "🚫 Для отмены используйте /cancel"
+            )
+            submission.progress_message_id = sent_msg.message_id
+
     except Exception as e:
         handle_submission_error(user_id, e)
 
-
-def handle_group_completion(user_id):
+# Обработчик команды /done для завершения загрузки фото
+@bot.message_handler(
+    commands=["done"],
+    func=lambda m: user_submissions.exists(m.from_user.id)
+    and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_PHOTOS,
+)
+@lock_input()
+def handle_done_contest_photos(message):
+    user_id = message.from_user.id
     submission = user_submissions.get(user_id)
-    if not submission or submission.status != "collecting_photos":
+    
+    # Обновляем активность
+    submission.update_activity()
+    user_submissions.update_last_activity(user_id)
+
+    # Проверка минимального количества
+    if len(submission.photos) == 0:
+        bot.reply_to(message, "❌ Нужно отправить хотя бы одно фото")
         return
 
-    # Проверяем, что с момента последнего фото прошло достаточно времени
-    if (time.time() - submission.last_media_time) >= 1.5:
-        # Проверка лимита фото
-        if len(submission.photos) == 0:
-            bot.send_message(user_id, "❌ Вы не отправили ни одного фото!")
-            user_submissions.remove(user_id)
-            return
+    # Удаляем сообщение прогресса
+    if submission.progress_message_id:
+        try:
+            bot.delete_message(message.chat.id, submission.progress_message_id)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
 
-        if len(submission.photos) > 10:
-            bot.send_message(user_id, "❌ Максимум 10 фото!")
-            user_submissions.remove(user_id)
-            return
+    request_contest_description(user_id)
 
-        # Переход к запросу текста
-        submission.status = UserState.WAITING_CONTEST_TEXT
-        bot.send_message(
-            user_id,
-            "📝 Теперь отправьте текст для работы:\n_Пишите его тут в чате_\n🚫 Для отмены используйте /cancel",
-            parse_mode="MarkdownV2",
-        )
+def request_contest_description(user_id):
+    submission = user_submissions.get(user_id)
+    
+    # Обновляем активность
+    submission.update_activity()
+    user_submissions.update_last_activity(user_id)
+
+    submission.status = UserState.WAITING_CONTEST_TEXT
+    bot.set_state(user_id, UserState.WAITING_CONTEST_TEXT)
+    
+    bot.send_message(
+        user_id,
+        "📝 Теперь отправьте текст для работы:\n"
+        "Можно использовать эмодзи _не премиум_\n"
+        "Максимум 1000 символов\n\n"
+        "🚫 Для отмены используйте /cancel",
+        parse_mode="MarkdownV2",
+    )
 
 
 @bot.message_handler(
@@ -571,14 +599,18 @@ def handle_group_completion(user_id):
 def handle_text(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
+    
+    # Обновляем активность
+    submission.update_activity()
+    user_submissions.update_last_activity(user_id)
 
     try:
         submission.caption = message.text
         submission.status = UserState.WAITING_CONTEST_PREVIEW
+        bot.set_state(user_id, UserState.WAITING_CONTEST_PREVIEW)
 
         # Показываем предпросмотр
-        media = [types.InputMediaPhoto(pid) for pid in submission.photos]
-        media[0].caption = f"Предпросмотр:\n{submission.caption}"
+        media = [types.InputMediaPhoto(pid['file_id']) for pid in submission.photos]
         bot.send_media_group(user_id, media)
 
         # Создаем клавиатуру
@@ -600,7 +632,7 @@ def handle_text(message):
         # Отправляем вопрос
         bot.send_message(
             message.chat.id,
-            "Отправить работу во время проведения конкурса за Вас?",
+            f"Предпросмотр вашей работы\n\nТекст:\n{submission.caption}\n\n\nОтправить работу во время проведения конкурса за Вас?",
             reply_markup=markup,
         )
     except Exception as e:
@@ -618,6 +650,11 @@ def handle_send_method(call):
 
     try:
         submission = user_submissions.get(user_id)
+    
+        # Обновляем активность
+        submission.update_activity()
+        user_submissions.update_last_activity(user_id)
+
         user = bot.get_chat(user_id)
         full_name = (
             f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
@@ -645,16 +682,19 @@ def handle_send_method(call):
         except Exception as e:
             raise Exception(f"Чат {CONTEST_CHAT_ID} недоступен: {str(e)}")
 
+        user_info = get_user_info(bot.get_chat(user_id))
         # Формируем медиагруппу
-        media = [types.InputMediaPhoto(pid) for pid in submission.photos]
-        media[0].caption = (
-            f"{submission.caption}\n\nОтправка ботом: {'✅ Да' if send_by_bot else '❌ Нет'}"
-        )
+        media = [types.InputMediaPhoto(pid['file_id']) for pid in submission.photos]
 
         # Отправляем в чат конкурса
         try:
             sent_messages = bot.send_media_group(chat_id=CONTEST_CHAT_ID, media=media)
-            logger.info(f"Работа отправлена в чат {CONTEST_CHAT_ID}: {sent_messages}")
+            logger.info(f"Медиа работы отправлены в чат {CONTEST_CHAT_ID}: {sent_messages}")
+            sent_messages = bot.send_message(
+                chat_id=CONTEST_CHAT_ID,
+                text=f"{submission.caption}\n\nОтправка ботом: {'✅ Да' if send_by_bot else '❌ Нет'}{user_info}",
+            )
+            logger.info(f"Текст работы отправлен в чат {CONTEST_CHAT_ID}: {sent_messages}")
         except Exception as e:
             logger.error(f"Ошибка отправки в чат: {str(e)}")
             raise
@@ -665,10 +705,11 @@ def handle_send_method(call):
             text="✅ Работа отправлена админам! После проверки я пришлю номер!",
             reply_markup=Menu.contests_menu(),
         )
+        bot.delete_state(user_id)
 
     except Exception as e:
         handle_submission_error(user_id, e)
-        bot.answer_callback_query(call.id, "⚠️ Ошибка при отправке работы админам!")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка при отправке работы админам")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "cancel_submission")
@@ -720,7 +761,7 @@ def check_timeout():
                     try:
                         bot.send_message(
                             user_id,
-                            "⌛ Время на отправку истекло! Начните заново",
+                            "⌛ Время на отправку истекло\! Начните заново",
                             reply_markup=Menu.contests_menu(),
                         )
                     except Exception as e:
@@ -747,8 +788,8 @@ def handle_contest_judje(call):
     )
     bot.edit_message_text(
         f"Вы хотите записаться на судейство ближайшего конкурса?\n\n"
-        "❗Напоминаю, что нельзя быть одновременно и судьёй, и участником - _при записи участником, запись на судейство аннулируется_\n\n"
-        '⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса - 🚫_для отмены ранее поданной заявки напишите выберите "сообщение админам" в главном меню_',
+        "❗Напоминаю, что нельзя быть одновременно и судьёй, и участником: _при записи участником, запись на судейство аннулируется_\n\n"
+        '⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса: 🚫_для отмены ранее поданной заявки напишите выберите "сообщение админам" в главном меню_',
         call.message.chat.id,
         call.message.message_id,
         parse_mode="MarkdownV2",
@@ -764,13 +805,13 @@ def handle_new_judge(call):
         # Проверяем существующую запись
         if SubmissionManager.is_judge(user_id):
             bot.answer_callback_query(
-                call.id, "❌ Вы уже подавали заявку на судейство!", show_alert=True
+                call.id, "❌ Вы уже подавали заявку на судейство\!", show_alert=True
             )
             return
         # Провекряем на участие
         if is_user_approved(user_id):
             bot.answer_callback_query(
-                call.id, "❌ Вы уже записаны в качестве участника!", show_alert=True
+                call.id, "❌ Вы уже записаны в качестве участника\!", show_alert=True
             )
             return
         # Добавляем в БД
@@ -825,7 +866,7 @@ def handle_user_turnip(call):
         ),
     )
     bot.edit_message_text(
-        f"На данный момент работа с репой отключена, но скоро мы её возобновим!",
+        f"На данный момент работа с репой отключена, но скоро мы её возобновим\!",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=markup,
@@ -885,7 +926,7 @@ def handle_user_to_admin(call):
 
     bot.send_message(
         call.message.chat.id,
-        "📤 Пришлите текст, который хотели бы отправить админам (о фото я спрошу позже)\n_Пишите текст тут в чате_\n"
+        "📤 Пришлите текст, который хотели бы отправить админам \(о фото я спрошу позже\)\n_Пишите текст тут в чате_\n"
         "🚫 Для отмены используйте /cancel",
         parse_mode="MarkdownV2",
     )
@@ -970,7 +1011,7 @@ def handle_confirmation(call):
         elif action == "skip_admphoto":
             # Проверка обязательных полей
             if "text" not in content_data or not content_data["text"].strip():
-                bot.send_message(user_id, "❌ Текст сообщения обязателен!")
+                bot.send_message(user_id, "❌ Текст сообщения обязателен\!")
                 return
 
             try:
@@ -1009,7 +1050,7 @@ def handle_adm_photo(message):
             photo_id = message.photo[-1].file_id
 
             if len(content_data["photos"]) > 10:
-                bot.send_message(message.chat.id, "Максимум 10 скриншотов!")
+                bot.send_message(message.chat.id, "Максимум 10 скриншотов\!")
                 return
 
             content_data["photos"].append(photo_id)
@@ -1134,7 +1175,7 @@ def handle_confirmation(call):
 
 def send_to_admin_chat(user_id, content_data):
     try:
-        logger.debug("send_to_admin_chat - ", content_data)
+        logger.debug("send_to_admin_chat: ", content_data)
         target_chat = ADMIN_CHAT_ID
         text = content_data["text"]
         photos = content_data["photos"]
@@ -1171,7 +1212,7 @@ def send_to_admin_chat(user_id, content_data):
 
         bot.send_message(
             user_id,
-            "✅ Контент успешно отправлен!",
+            "✅ Контент успешно отправлен\!",
             reply_markup=Menu.back_user_only_main_menu(),
         )
 
@@ -1199,7 +1240,7 @@ def handle_user_to_news(call):
     if not is_user_in_chat(call.from_user.id):
         bot.send_message(
             call.message.chat.id,
-            "❌ Для отправки новостей необходимо состоять в нашем чате!\n"
+            "❌ Для отправки новостей необходимо состоять в нашем чате\!\n"
             + Links.get_chat_url(),
             reply_markup=Menu.back_user_only_main_menu(),
         )
@@ -1243,7 +1284,7 @@ def handle_news_code(call):
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
         text="🔢 Пришлите код\n"
-        "*Формат*: `DA-0000-0000-0000` _(вместо 0 ваши цифры)_\n"
+        "*Формат*: `DA-0000-0000-0000` _\(вместо 0 ваши цифры\)_\n"
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
@@ -1263,7 +1304,7 @@ def handle_news_code(call):
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
         text="🔢 Пришлите код\n"
-        "*Формат*: `RA-0000-0000-0000` _(вместо 0 ваши цифры)_\n"
+        "*Формат*: `RA-0000-0000-0000` _\(вместо 0 ваши цифры\)_\n"
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
@@ -1282,8 +1323,8 @@ def handle_news_pocket(call):
     user_content_storage.init_pocket(user_id)
     bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN)
     bot.edit_message_text(
-        text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы - лицевую и обратную стороны\n"
-        'Лучше всего это сделать через кнопку "SAVE"!\n\n'
+        text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы: лицевую и обратную стороны\n"
+        'Лучше всего это сделать через кнопку "SAVE"\!\n\n'
         "⬇️ Отправьте оба скриншота в чат\n"
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
@@ -1343,12 +1384,12 @@ def handle_news_screenshots(message):
     # 3. Проверяем дубликаты
     existing_ids = {p["unique_id"] for p in data.get("photos", [])}
     if unique_id in existing_ids:
-        bot.reply_to(message, "❌ Это изображение уже было добавлено!")
+        bot.reply_to(message, "❌ Это изображение уже было добавлено\!")
         return
 
     # 4. Проверяем лимит
     if len(data.get("photos", [])) > 10:
-        bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов!")
+        bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов\!")
         request_description(user_id)
 
     # 5. Сохраняем только оригинал
@@ -1369,7 +1410,7 @@ def handle_news_screenshots(message):
         sent_msg = bot.reply_to(
             message,
             f"{progress_bar}\n"
-            f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
+            f"✅ Скриншот добавлен\! Всего: {len(data['photos'])}/10\n"
             "Отправьте еще или нажмите /done\n\n🚫 Для отмены используйте /cancel",
         )
         # Сохраняем ID сообщения для последующего удаления
@@ -1381,7 +1422,7 @@ def request_description(user_id):
     bot.set_state(user_id, UserState.WAITING_NEWS_DESCRIPTION)
     bot.send_message(
         user_id,
-        "📝 Напишите описание новости (или /skip)\n🚫 Для отмены используйте /cancel",
+        "📝 Напишите описание новости \(или /skip\)\n🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1402,7 +1443,7 @@ def handle_done_news_photos(message):
             logger.warning(f"Не удалось удалить сообщение: {e}")
 
     if len(data.get("photos", [])) == 0:
-        bot.reply_to(message, "❌ Вы не отправили ни одного фото!")
+        bot.reply_to(message, "❌ Вы не отправили ни одного фото\!")
         return
 
     request_description(user_id)
@@ -1475,7 +1516,7 @@ def handle_code_value(message):
     code = message.text.upper()
 
     if not validate_code(r"^[DR]A-\d{4}-\d{4}-\d{4}$", code):
-        bot.reply_to(message, "❌ Неверный формат кода! Пример: DA-1234-5678-9012")
+        bot.reply_to(message, "❌ Неверный формат кода\! Пример: DA-1234-5678-9012")
         return
 
     user_content_storage.get_data(user_id, "code")["code"] = code
@@ -1511,12 +1552,12 @@ def handle_code_screenshots(message):
     # 3. Проверяем дубликаты
     existing_ids = {p["unique_id"] for p in data.get("photos", [])}
     if unique_id in existing_ids:
-        bot.reply_to(message, "❌ Это изображение уже было добавлено!")
+        bot.reply_to(message, "❌ Это изображение уже было добавлено\!")
         return
 
     # 4. Проверяем лимит
     if len(data.get("photos", [])) > 10:
-        bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов!")
+        bot.reply_to(message, "❌ Достигнут максимум 10 скриншотов\!")
         request_speaker(user_id)
 
     # 5. Сохраняем только оригинал
@@ -1537,7 +1578,7 @@ def handle_code_screenshots(message):
         sent_msg = bot.reply_to(
             message,
             f"{progress_bar}\n"
-            f"✅ Скриншот добавлен! Всего: {len(data['photos'])}/10\n"
+            f"✅ Скриншот добавлен\! Всего: {len(data['photos'])}/10\n"
             "Отправьте еще или нажмите /done\n\n🚫 Для отмены используйте /cancel",
         )
         # Сохраняем ID сообщения для последующего удаления
@@ -1569,7 +1610,7 @@ def handle_done_news_photos(message):
             logger.warning(f"Не удалось удалить сообщение: {e}")
 
     if len(data.get("photos", [])) == 0:
-        bot.reply_to(message, "❌ Вы не отправили ни одного фото!")
+        bot.reply_to(message, "❌ Вы не отправили ни одного фото\!")
         return
 
     request_speaker(user_id)
@@ -1646,7 +1687,7 @@ def handle_media_group(message, data, user_id):
         error_media_groups[media_group_id] = True
         bot.send_message(
             user_id,
-            "❌ _Вы уже отправили 1 фото ранее, а сейчас отправляете ещё несколько!_\nПришлите второе фото заново!",
+            "❌ _Вы уже отправили 1 фото ранее, а сейчас отправляете ещё несколько\!_\nПришлите второе фото заново\!",
             parse_mode="MarkdownV2",
         )
         # Устанавливаем таймер для очистки кэша (5 минут)
@@ -1671,7 +1712,7 @@ def handle_media_group(message, data, user_id):
         if len(pocket_media_groups[mg_id]["photos"]) >= 2:
             pocket_media_groups[mg_id]["timer"].cancel()
             del pocket_media_groups[mg_id]
-            handle_pocket_error(user_id, "❌ Можно отправить только 2 фото!")
+            handle_pocket_error(user_id, "❌ Можно отправить только 2 фото\!")
             return
 
     # Добавляем уникальные фото
@@ -1688,7 +1729,7 @@ def handle_media_group(message, data, user_id):
 
         # Если превысили лимит - сразу отменяем
         if len(pocket_media_groups[mg_id]["photos"]) > 2:
-            handle_pocket_error(user_id, "❌ Можно отправить только 2 фото!")
+            handle_pocket_error(user_id, "❌ Можно отправить только 2 фото\!")
             pocket_media_groups[mg_id]["timer"].cancel()
             del pocket_media_groups[mg_id]
 
@@ -1708,7 +1749,7 @@ def handle_single_photo(message, data, user_id):
 
     # Лимит фото
     if len(data["photos"]) > 2:
-        handle_pocket_error(user_id, "❌ Максимум 2 фото!")
+        handle_pocket_error(user_id, "❌ Максимум 2 фото\!")
         return
 
     user_content_storage.update_data(user_id, data)
@@ -1729,7 +1770,7 @@ def process_pocket_group(media_group_id):
     try:
         # Проверяем окончательное количество
         if len(group_data["photos"]) != 2:
-            handle_pocket_error(user_id, "❌ Нужно отправить ровно 2 фото!")
+            handle_pocket_error(user_id, "❌ Нужно отправить ровно 2 фото\!")
             return
 
         # Сохраняем и обрабатываем
@@ -1786,7 +1827,7 @@ def handle_design_code(message):
     code = message.text.upper()
 
     if not validate_code(r"^MA-\d{4}-\d{4}-\d{4}$", code):
-        bot.reply_to(message, "❌ Неверный формат! Пример: MA-1234-5678-9012")
+        bot.reply_to(message, "❌ Неверный формат\! Пример: MA-1234-5678-9012")
         return
 
     user_content_storage.get_data(user_id, "design")["code"] = code
@@ -1809,7 +1850,7 @@ def handle_design_screen(message):
 
     # Проверяем, что это не альбом
     if message.media_group_id:
-        bot.reply_to(message, "❌ Отправьте одно фото!")
+        bot.reply_to(message, "❌ Отправьте одно фото\!")
         return
 
     # Сохраняем последний (наибольший) размер фото
@@ -1824,7 +1865,7 @@ def handle_design_screen(message):
     bot.set_state(user_id, UserState.WAITING_DESIGN_GAME_SCREENS)
     bot.send_message(
         message.chat.id,
-        "🎮 Пришлите до 9 (НЕ 10) скриншотов с применением рисунка в игре:\n🚫 Для отмены используйте /cancel",
+        "🎮 Пришлите до 9 \(НЕ 10\) скриншотов с применением рисунка в игре:\n🚫 Для отмены используйте /cancel",
     )
 
 
@@ -1854,12 +1895,12 @@ def handle_game_screens(message):
     # 3. Проверяем дубликаты
     existing_ids = {p["unique_id"] for p in data.get("game_screens", [])}
     if unique_id in existing_ids:
-        bot.reply_to(message, "❌ Это изображение уже было добавлено!")
+        bot.reply_to(message, "❌ Это изображение уже было добавлено\!")
         return
 
     # 4. Проверяем лимит
     if len(data.get("game_screens", [])) >= 9:
-        bot.reply_to(message, "❌ Достигнут максимум 9 скриншотов!")
+        bot.reply_to(message, "❌ Достигнут максимум 9 скриншотов\!")
         return
 
     # 5. Сохраняем только оригинал
@@ -1879,7 +1920,7 @@ def handle_game_screens(message):
     sent_msg = bot.reply_to(
         message,
         f"{progress_bar}\n"
-        f"✅ Скриншот добавлен! Всего: {len(data['game_screens'])}/9\n"
+        f"✅ Скриншот добавлен\! Всего: {len(data['game_screens'])}/9\n"
         "Отправьте еще или нажмите /done\n\n🚫 Для отмены используйте /cancel",
     )
     # Сохраняем ID сообщения для последующего удаления
@@ -2095,7 +2136,7 @@ def handle_preview_actions_send_to_news_chat(call):
 
             bot.answer_callback_query(
                 call.id,
-                "✅ Публикация отправлена!",
+                "✅ Публикация отправлена\!",
             )
             bot.send_message(
                 user_id,

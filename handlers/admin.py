@@ -60,8 +60,8 @@ storage = TempStorage()
 ADMIN_STEPS = {
     "theme": "Введите тему конкурса:",
     "description": "Введите описание:",
-    "contest_date": "Введите дату проведения конкурса (через точку ДД ММ ГГГГ):",
-    "end_date_of_admission": "Введите дату окончания приёма работ (через точку ДД ММ ГГГГ):",
+    "contest_date": "Введите дату проведения конкурса \(через точку ДД ММ ГГГГ\):",
+    "end_date_of_admission": "Введите дату окончания приёма работ \(через точку ДД ММ ГГГГ\):",
 }
 
 
@@ -69,7 +69,7 @@ def check_admin(call):
     if call.from_user.id not in admin_ids:
         bot.answer_callback_query(
             call.id,
-            "⚠️ Вы не являетесь админом! Вы вообще как сюда попали???",
+            "⚠️ Вы не являетесь админом\! Вы вообще как сюда попали???",
             show_alert=True,
         )
         return False
@@ -85,7 +85,7 @@ def handle_adm_contest(call):
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
-        "Меню конкурсов (адм)\nВыберите действие:",
+        "Меню конкурсов \(адм\)\nВыберите действие:",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
@@ -233,7 +233,7 @@ def handle_admin_input(message):
         except ValueError:
             bot.send_message(
                 message.chat.id,
-                "❌ Неверный формат! Используйте через точку ДД ММ ГГГГ _(например: 31точка12точка2024)_",
+                "❌ Неверный формат\! Используйте через точку ДД ММ ГГГГ _\(например: 31точка12точка2024\)_",
             )
             return
 
@@ -324,7 +324,6 @@ def handle_show_participants(call):
         text=text,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="MarkdownV2",
         reply_markup=Menu.adm_stat_menu(),
     )
 
@@ -346,13 +345,12 @@ def handle_show_judges(call):
 
     text = "📋 Список судей:\n\n"
     for j in judges:
-        text += f"👤 {j[0]}\n" f"🗨️ @{j[1]}\n" f"────────────────\n"
+        text += f"👤 {j[0]}\n🗨️ @{j[1]}\n────────────────\n"
 
     bot.edit_message_text(
         text=text,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        parse_mode="MarkdownV2",
         reply_markup=Menu.adm_stat_menu(),
     )
 
@@ -363,16 +361,33 @@ def process_rejection(message, submission_id):
 
         submission = get_submission(submission_id)
         user_id = submission["user_id"]
-        bot.send_message(
-            user_id,
-            f"❌ Работа отклонена!\nПричина: {message.text}",
-            reply_markup=Menu.back_user_contest_menu(),
-        )
+        user_notified = False  # Флаг успешности уведомления
+
+        try:
+            bot.send_message(
+                user_id,
+                f"❌ Работа отклонена\nПричина: {message.text}",
+                reply_markup=Menu.back_user_contest_menu(),
+            )
+            user_notified = True
+        except Exception as user_error:
+            logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
+
+        # Формируем текст для админа
+        status_text = "✅ Пользователь уведомлён" if user_notified else "⚠️ Не удалось уведомить пользователя"
 
         bot.edit_message_text(
-            message.chat.id,
-            f"Работа #{submission_id} отклонена!",
-            reply_markup=Menu.adm_menu(),
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            text=(f"Работа #{submission_id} отклонена\n{status_text}"),
+            reply_markup=Menu.adm_menu()
+        )
+
+        logger.info(
+            f"REJECTION: submission={submission_id} "
+            f"admin={message.from_user.id} "
+            f"user_notified={user_notified} "
+            f"reason={message.text}"
         )
 
     except Exception as e:
@@ -384,7 +399,7 @@ def handle_admin_error(chat_id, error):
     error_msg = (
         "⚠️ *Ошибка администратора*\n"
         f"```{str(error)}```\n"
-        "Пожалуйста, проверьте логи для деталей."
+        "Пожалуйста, проверьте логи для деталей"
     )
 
     try:
@@ -395,8 +410,7 @@ def handle_admin_error(chat_id, error):
 
     # Логирование в консоль
     logger = logging.getLogger(__name__)
-    logger.error(f"\n❌ ADMIN ERROR [{datetime.now()}]:")
-    traceback.print_exc()
+    logger.error(f"\n❌ ADMIN ERROR [{datetime.now()}]: {error}")
 
 
 @bot.callback_query_handler(
@@ -417,7 +431,7 @@ def handle_adm_contest_reset(call):
     bot.edit_message_text(
         text=(  # Явное указание текста
             f"⚠️ Текущее количество участников: {current_count}\n"
-            f"количество подавших заявку на судейство: {SubmissionManager.get_judges_count()}"
+            f"количество подавших заявку на судейство: {SubmissionManager.get_judges_count()}\n\n"
             "Вы уверены, что хотите сбросить счетчик?"
         ),
         chat_id=call.message.chat.id,
@@ -445,7 +459,7 @@ def confirm_reset(call):
         f"количество отвергнутых работ: {SubmissionManager.get_rejected_count()}/0"
     )
     logger.debug(
-        f"текущее количество участников (всего): {SubmissionManager.get_current_number()}/0"
+        f"текущее количество участников всего: {SubmissionManager.get_current_number()}/0"
     )
     logger.debug(
         f"количество подавших заявку на судейство: {SubmissionManager.get_judges_count()}/0"
@@ -459,7 +473,7 @@ def confirm_reset(call):
     )
 
     bot.edit_message_text(
-        text="✅ Счетчик участников сброшен!",
+        text="✅ Счетчик участников сброшен",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=Menu.adm_contests_menu(),
@@ -500,6 +514,14 @@ def show_pending_submissions(call):
                     btn_text, callback_data=f"submission_{sub[0]}"
                 )
             )
+        markup.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.BACK, callback_data=ButtonCallback.ADM_CONTEST
+            ),
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            ),
+        )
 
         bot.edit_message_text(
             "Выберите работу для модерации:",
@@ -520,19 +542,30 @@ def show_submission_details(call):
         submission_id = int(call.data.split("_")[1])
         submission = get_submission(submission_id)
 
+        if not submission:
+            bot.answer_callback_query(call.id, "❌ Работа не найдена")
+            return
+
         media_group = []
-        for i, photo in enumerate(submission["photos"]):
+        # Проходим по списку словарей и извлекаем file_id
+        for i, photo_dict in enumerate(submission["photos"]):
+            file_id = photo_dict.get("file_id")
+            if not file_id:
+                continue  # Пропускаем некорректные записи
             media = types.InputMediaPhoto(
-                photo,
+                media=file_id,  # Передаём строку, а не словарь
                 caption=(
                     f"Работа #{submission_id}\n\n{submission['caption']}"
-                    if i == 0
-                    else ""
-                ),
+                    if i == 0 
+                    else None
+                )
             )
             media_group.append(media)
 
-        bot.send_media_group(call.message.chat.id, media_group)
+        if media_group:
+            bot.send_media_group(call.message.chat.id, media_group)
+        else:
+            bot.answer_callback_query(call.id, "❌ Нет доступных фотографий")
 
         markup = types.InlineKeyboardMarkup()
         markup.row(
@@ -572,16 +605,24 @@ def approve_work(call):
         # Удаляем пользователя из временного хранилища
         user_submissions.remove(user_id)
 
-        bot.send_message(
-            user_id,
-            f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
-            reply_markup=Menu.back_user_contest_menu(),
-        )
+        user_notified = False  # Флаг успешности уведомления
+        # Пытаемся уведомить пользователя
+        try:
+            bot.send_message(
+                user_id,
+                f"✅ Ваша работа одобрена!\nНомер работы: #{number}",
+                reply_markup=Menu.back_user_contest_menu(),
+            )
+            user_notified = True
+        except Exception as user_error:
+            logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
+        # Формируем текст для админа
+        status_text = "✅ Пользователь уведомлён" if user_notified else "⚠️ Не удалось уведомить пользователя"
 
         bot.edit_message_text(
-            f"Работа #{submission_id} одобрена как №{number}!",
-            call.message.chat.id,
-            call.message.message_id,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=f"Работа #{submission_id} одобрена как №{number}\n{status_text}",
             reply_markup=Menu.adm_menu(),
         )
 
@@ -599,7 +640,7 @@ def reject_work(call):
         submission_id = int(call.data.replace(ButtonCallback.ADM_REJECT, ""))
         msg = bot.send_message(
             call.message.chat.id,
-            "Введите причину отклонения:",
+            "Введите причину отклонения в ответ на это сообщение, то есть реплаем:",
         )
         bot.register_for_reply(msg, lambda m: process_rejection(m, submission_id))
 
@@ -650,7 +691,7 @@ def handle_reply_button(call):
 
         msg = bot.send_message(
             call.message.chat.id,  # Отвечаем в тот же чат
-            f"✍️ Введите ответ для пользователя:\n🚫 Для отмены используйте /cancel_adm",
+            f"✍️ Введите ответ для пользователя в ответ на это сообщение, то есть реплаем:\n🚫 Для отмены используйте /cancel_adm",
         )
         
         # Регистрируем следующий шаг с явным указанием чата
@@ -680,14 +721,24 @@ def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id к�
             bot.send_message(chat_id, "❌ Сессия ответа устарела")
             return
 
+        user_notified = False  # Флаг успешности уведомления
+
+        # Пытаемся уведомить пользователя
+        try:
+            bot.send_message(
+                user_id,
+                f"📨 Сообщение от администратора:\n{message.text}",
+                reply_markup=Menu.user_to_admin_or_main_menu(),
+            )
+            user_notified = True
+        except Exception as user_error:
+            logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
+        # Формируем текст для админа
+        status_text = "✅ Ответ отправлен пользователю" if user_notified else "⚠️ Не удалось отправить ответ пользователю"
+
         bot.send_message(
-            user_id,
-            f"📨 Сообщение от администратора:\n{message.text}",
-            reply_markup=Menu.user_to_admin_or_main_menu(),
-        )
-        bot.send_message(
-            chat_id,
-            f"✅ Ответ отправлен пользователю",
+            chat_id=chat_id,
+            text=status_text,
             reply_markup=Menu.adm_menu(),
         )
 
