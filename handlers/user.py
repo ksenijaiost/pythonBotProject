@@ -214,14 +214,16 @@ def handle_help(message):
 
     markup = types.InlineKeyboardMarkup()
     markup.add(
-            types.InlineKeyboardButton(
-                text=ButtonText.USER_HELP_SITE, url=ConstantLinks.HELP_LINK
-            )
+        types.InlineKeyboardButton(
+            text=ButtonText.USER_HELP_SITE, url=ConstantLinks.HELP_LINK
         )
+    )
     # Добавляем кнопку "В главное меню" только если нет активного состояния
     if current_state:
         help_text += "\n\n Можете продолжить выполнение предыдущих действий\n\n"
-        help_text += "🚫 Для отмены действия и возврата в главное меню нажмите /cancel\n"
+        help_text += (
+            "🚫 Для отмены действия и возврата в главное меню нажмите /cancel\n"
+        )
         help_text += "🔄 Для рестарта бота можете нажать команду /start, _сбросится то, что Вы делали, а бот перезапустится_"
     else:
         markup.add(
@@ -331,9 +333,7 @@ def handle_user_contest_info(call):
 
         if not contest:
             # Если конкурсов нет в базе
-            text = (
-                "🎉 В настоящее время активных конкурсов нет\nСледите за обновлениями ^^"
-            )
+            text = "🎉 В настоящее время активных конкурсов нет\nСледите за обновлениями ^^"
             markup = Menu.back_user_contest_menu()
         else:
             current_date = datetime.now().date()
@@ -413,7 +413,7 @@ def start_contest_submission(call):
             # Если конкурсов нет в базе
             bot.answer_callback_query(
                 call.id,
-                "🎉 В настоящее время активных конкурсов нет\n\nСледите за обновлениями\!",
+                "🎉 В настоящее время активных конкурсов нет\n\nСледите за обновлениями ^^",
                 show_alert=True,
             )
             return
@@ -423,7 +423,7 @@ def start_contest_submission(call):
             if end_date_obj < current_date:
                 bot.answer_callback_query(
                     call.id,
-                    "❗️Приём работ на конкурс завершён\! Следите за обновлениями\!",
+                    "❗️Приём работ на конкурс завершён\nСледите за обновлениями",
                     show_alert=True,
                 )
                 return
@@ -450,7 +450,9 @@ def start_contest_submission(call):
             user_id = call.from_user.id
             submission = ContestSubmission()
             bot.set_state(user_id, UserState.WAITING_CONTEST_PHOTOS)
-            submission.status = UserState.WAITING_CONTEST_PHOTOS  # Устанавливаем начальный статус
+            submission.status = (
+                UserState.WAITING_CONTEST_PHOTOS
+            )  # Устанавливаем начальный статус
             user_submissions.add(user_id, submission)
 
             text = "📸 Пришлите работу _до 10 фото без текста, его я попрошу позже_\n"
@@ -483,7 +485,7 @@ def start_contest_submission(call):
 def handle_contest_photos(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
-    
+
     # Обновляем активность
     submission.update_activity()
     user_submissions.update_last_activity(user_id)
@@ -513,10 +515,9 @@ def handle_contest_photos(message):
             return
 
         # Сохраняем данные
-        submission.photos.append({
-            "file_id": original_photo.file_id,
-            "unique_id": unique_id
-        })
+        submission.photos.append(
+            {"file_id": original_photo.file_id, "unique_id": unique_id}
+        )
 
         # Обновляем таймер последней активности
         submission.last_activity = time.time()
@@ -526,20 +527,23 @@ def handle_contest_photos(message):
             request_contest_description(user_id)
         else:
             # Формируем прогресс-бар
-            progress_bar = "🟪" * len(submission.photos) + "◻️" * (10 - len(submission.photos))
-            
+            progress_bar = "🟪" * len(submission.photos) + "◻️" * (
+                10 - len(submission.photos)
+            )
+
             # Отправляем обновлённое сообщение
             sent_msg = bot.reply_to(
                 message,
                 f"{progress_bar}\n"
                 f"✅ Фото добавлено! Всего: {len(submission.photos)}/10\n"
                 "Отправьте еще фото или нажмите /done\n\n"
-                "🚫 Для отмены используйте /cancel"
+                "🚫 Для отмены используйте /cancel",
             )
             submission.progress_message_id = sent_msg.message_id
 
     except Exception as e:
         handle_submission_error(user_id, e)
+
 
 # Обработчик команды /done для завершения загрузки фото
 @bot.message_handler(
@@ -551,7 +555,7 @@ def handle_contest_photos(message):
 def handle_done_contest_photos(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
-    
+
     # Обновляем активность
     submission.update_activity()
     user_submissions.update_last_activity(user_id)
@@ -570,16 +574,17 @@ def handle_done_contest_photos(message):
 
     request_contest_description(user_id)
 
+
 def request_contest_description(user_id):
     submission = user_submissions.get(user_id)
-    
+
     # Обновляем активность
     submission.update_activity()
     user_submissions.update_last_activity(user_id)
 
     submission.status = UserState.WAITING_CONTEST_TEXT
     bot.set_state(user_id, UserState.WAITING_CONTEST_TEXT)
-    
+
     bot.send_message(
         user_id,
         "📝 Теперь отправьте текст для работы:\n"
@@ -599,7 +604,7 @@ def request_contest_description(user_id):
 def handle_text(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
-    
+
     # Обновляем активность
     submission.update_activity()
     user_submissions.update_last_activity(user_id)
@@ -610,7 +615,7 @@ def handle_text(message):
         bot.set_state(user_id, UserState.WAITING_CONTEST_PREVIEW)
 
         # Показываем предпросмотр
-        media = [types.InputMediaPhoto(pid['file_id']) for pid in submission.photos]
+        media = [types.InputMediaPhoto(pid["file_id"]) for pid in submission.photos]
         bot.send_media_group(user_id, media)
 
         # Создаем клавиатуру
@@ -650,7 +655,7 @@ def handle_send_method(call):
 
     try:
         submission = user_submissions.get(user_id)
-    
+
         # Обновляем активность
         submission.update_activity()
         user_submissions.update_last_activity(user_id)
@@ -684,17 +689,21 @@ def handle_send_method(call):
 
         user_info = get_user_info(bot.get_chat(user_id))
         # Формируем медиагруппу
-        media = [types.InputMediaPhoto(pid['file_id']) for pid in submission.photos]
+        media = [types.InputMediaPhoto(pid["file_id"]) for pid in submission.photos]
 
         # Отправляем в чат конкурса
         try:
             sent_messages = bot.send_media_group(chat_id=CONTEST_CHAT_ID, media=media)
-            logger.info(f"Медиа работы отправлены в чат {CONTEST_CHAT_ID}: {sent_messages}")
+            logger.info(
+                f"Медиа работы отправлены в чат {CONTEST_CHAT_ID}: {sent_messages}"
+            )
             sent_messages = bot.send_message(
                 chat_id=CONTEST_CHAT_ID,
                 text=f"{submission.caption}\n\nОтправка ботом: {'✅ Да' if send_by_bot else '❌ Нет'}{user_info}",
             )
-            logger.info(f"Текст работы отправлен в чат {CONTEST_CHAT_ID}: {sent_messages}")
+            logger.info(
+                f"Текст работы отправлен в чат {CONTEST_CHAT_ID}: {sent_messages}"
+            )
         except Exception as e:
             logger.error(f"Ошибка отправки в чат: {str(e)}")
             raise
@@ -1324,7 +1333,7 @@ def handle_news_pocket(call):
     bot.set_state(user_id, UserState.WAITING_POCKET_SCREEN)
     bot.edit_message_text(
         text="📸 Вам необходимо подготовить 2 скриншота карточки дружбы: лицевую и обратную стороны\n"
-        'Лучше всего это сделать через кнопку "SAVE"\!\n\n'
+        'Лучше всего это сделать через кнопку "SAVE"\n\n'
         "⬇️ Отправьте оба скриншота в чат\n"
         "🚫 Для отмены используйте /cancel",
         chat_id=call.message.chat.id,
