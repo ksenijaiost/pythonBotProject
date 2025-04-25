@@ -294,7 +294,7 @@ def handle_cancel(message):
     bot.send_message(
         message.chat.id,
         "🚫 Отправка отменена",
-        reply_markup=Menu.back_user_only_main_menu(),
+        reply_markup=Menu.back_only_main_menu(),
     )
 
 
@@ -742,7 +742,7 @@ def handle_cancel_submission(call):
             bot.send_message(
                 user_id,
                 "Вернуться в главное меню?",
-                reply_markup=Menu.back_user_only_main_menu(),
+                reply_markup=Menu.back_only_main_menu(),
             )
     except Exception as e:
         handle_submission_error(user_id, e)
@@ -845,7 +845,7 @@ def handle_new_judge(call):
             bot.send_message(
                 user_id,
                 "✅ Заявка успешно отправлена!",
-                reply_markup=Menu.back_user_only_main_menu(),
+                reply_markup=Menu.back_only_main_menu(),
             )
         else:
             bot.answer_callback_query(
@@ -910,7 +910,7 @@ def handle_cancel(message):
     bot.send_message(
         message.chat.id,
         "🚫 Отправка отменена",
-        reply_markup=Menu.back_user_only_main_menu(),
+        reply_markup=Menu.back_only_main_menu(),
     )
     if user_id in temp_storage:
         del temp_storage[user_id]
@@ -1222,7 +1222,7 @@ def send_to_admin_chat(user_id, content_data):
         bot.send_message(
             user_id,
             "✅ Контент успешно отправлен",
-            reply_markup=Menu.back_user_only_main_menu(),
+            reply_markup=Menu.back_only_main_menu(),
         )
 
     except Exception as e:
@@ -1230,7 +1230,7 @@ def send_to_admin_chat(user_id, content_data):
         bot.send_message(
             user_id,
             "❌ Ошибка при отправке контента",
-            reply_markup=Menu.back_user_only_main_menu(),
+            reply_markup=Menu.back_only_main_menu(),
         )
     finally:
         # Очищаем хранилище
@@ -1251,7 +1251,7 @@ def handle_user_to_news(call):
             call.message.chat.id,
             "❌ Для отправки новостей необходимо состоять в нашем чате\n"
             + Links.get_chat_url(),
-            reply_markup=Menu.back_user_only_main_menu(),
+            reply_markup=Menu.back_only_main_menu(),
         )
         return
 
@@ -2096,7 +2096,7 @@ def preview_send_to_news_chat(user_id):
         bot.send_message(
             user_id,
             "❌ Произошла ошибка\nПопробуйте начать заново.",
-            reply_markup=Menu.back_user_only_main_menu(),
+            reply_markup=Menu.back_only_main_menu(),
         )
 
 
@@ -2121,7 +2121,7 @@ def handle_preview_actions_send_to_news_chat(call):
                 bot.send_message(
                     user_id,
                     "Вернуться в главное меню?",
-                    reply_markup=Menu.back_user_only_main_menu(),
+                    reply_markup=Menu.back_only_main_menu(),
                 )
                 return
 
@@ -2150,7 +2150,7 @@ def handle_preview_actions_send_to_news_chat(call):
             bot.send_message(
                 user_id,
                 "Вернуться в главное меню?",
-                reply_markup=Menu.back_user_only_main_menu(),
+                reply_markup=Menu.back_only_main_menu(),
             )
         else:
             bot.answer_callback_query(
@@ -2160,7 +2160,7 @@ def handle_preview_actions_send_to_news_chat(call):
             bot.send_message(
                 user_id,
                 "Вернуться в главное меню?",
-                reply_markup=Menu.back_user_only_main_menu(),
+                reply_markup=Menu.back_only_main_menu(),
             )
 
         # Удаляем сообщение с кнопками
