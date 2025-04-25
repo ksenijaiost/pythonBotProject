@@ -32,13 +32,14 @@ class ButtonText:
 
     # Администраторские
     # Главное меню
-    ADM_CONTEST = "Конкурс"
-    ADM_TURNIP = "Репка"
-    ADM_ADD_GUIDE = "Добавить гайд"
+    ADM_CONTEST = "🏆 Конкурс"
+    ADM_TURNIP = "🥕 Репка"
+    ADM_ADD_GUIDE = "📚 Добавить гайд"
+    ADM_BLOCK = "🚫 Список блокировок"
     # Меню конкурсов
-    ADM_CONTEST_INFO = "Информация"
-    ADM_REVIEW_WORKS = "👁 Проверить работы"
-    ADM_CONTEST_STATS = "Статистика"
+    ADM_CONTEST_INFO = "ℹ️ Информация"
+    ADM_REVIEW_WORKS = "👁️ Проверить работы"
+    ADM_CONTEST_STATS = "📊 Статистика"
     ADM_SHOW_PARTICIPANTS = "👥 Список участников"
     ADM_SHOW_JUDGES = "⚖️ Список судей"
     ADM_APPROVE = "✅ Одобрить"
@@ -75,6 +76,7 @@ class ButtonCallback:
     ADM_CONTEST = "adm_contest"
     ADM_TURNIP = "adm_turnip"
     ADM_ADD_GUIDE = "adm_add_guide"
+    ADM_BLOCK = "adm_show_blocked_users"
     # Меню конкурсов
     ADM_CONTEST_INFO = "adm_contest_info"
     ADM_CONTEST_RESET = "adm_consest_reset"

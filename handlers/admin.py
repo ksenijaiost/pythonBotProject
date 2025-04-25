@@ -7,7 +7,7 @@ from telebot import types
 from telebot.apihelper import ApiTelegramException
 from telegram.helpers import escape_markdown
 
-from database.contest import (
+from database.db_classes import (
     ContestManager,
     SubmissionManager,
     get_submission,
@@ -113,7 +113,7 @@ def start_contest_update(call):
             # Экранируем все динамические данные
             theme = escape_markdown(contest[1], version=2)
             description = escape_markdown(contest[2], version=2)
-            
+
             # Экранируем даты с точками
             contest_date = escape_markdown(contest[3], version=2)
             end_date_of_admission = escape_markdown(contest[4], version=2)
@@ -378,13 +378,17 @@ def process_rejection(message, submission_id):
             logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
 
         # Формируем текст для админа
-        status_text = "✅ Пользователь уведомлён" if user_notified else "⚠️ Не удалось уведомить пользователя"
+        status_text = (
+            "✅ Пользователь уведомлён"
+            if user_notified
+            else "⚠️ Не удалось уведомить пользователя"
+        )
 
         bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=message.message_id,
             text=(f"Работа #{submission_id} отклонена\n{status_text}"),
-            reply_markup=Menu.adm_menu()
+            reply_markup=Menu.adm_menu(),
         )
 
         logger.info(
@@ -560,9 +564,9 @@ def show_submission_details(call):
                 media=file_id,  # Передаём строку, а не словарь
                 caption=(
                     f"Работа #{submission_id}\n\n{submission['caption']}"
-                    if i == 0 
+                    if i == 0
                     else None
-                )
+                ),
             )
             media_group.append(media)
 
@@ -621,7 +625,11 @@ def approve_work(call):
         except Exception as user_error:
             logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
         # Формируем текст для админа
-        status_text = "✅ Пользователь уведомлён" if user_notified else "⚠️ Не удалось уведомить пользователя"
+        status_text = (
+            "✅ Пользователь уведомлён"
+            if user_notified
+            else "⚠️ Не удалось уведомить пользователя"
+        )
 
         bot.edit_message_text(
             chat_id=call.message.chat.id,
@@ -691,17 +699,17 @@ def handle_reply_button(call):
         bot.answer_callback_query(call.id)
 
         # Сохраняем связь админ -> пользователь !с привязкой к chat.id админа
-        admin_replies[call.message.chat.id] = user_id # <-- Ключом выступает chat.id!
+        admin_replies[call.message.chat.id] = user_id  # <-- Ключом выступает chat.id!
 
         msg = bot.send_message(
             call.message.chat.id,  # Отвечаем в тот же чат
             f"✍️ Введите ответ для пользователя в ответ на это сообщение, то есть реплаем:\n🚫 Для отмены используйте /cancel_adm",
         )
-        
+
         # Регистрируем следующий шаг с явным указанием чата
         bot.register_next_step_handler(
             message=msg,
-            callback=partial(process_admin_reply, chat_id=call.message.chat.id)
+            callback=partial(process_admin_reply, chat_id=call.message.chat.id),
         )
 
     except Exception as e:
@@ -715,6 +723,7 @@ def cancel_reply(call):
         del admin_replies[call.message.chat.id]
     bot.delete_message(call.message.chat.id, call.message.message_id)
     bot.answer_callback_query(call.id, "Ответ отменён")
+
 
 def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id как параметр
     try:
@@ -738,7 +747,11 @@ def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id к�
         except Exception as user_error:
             logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
         # Формируем текст для админа
-        status_text = "✅ Ответ отправлен пользователю" if user_notified else "⚠️ Не удалось отправить ответ пользователю"
+        status_text = (
+            "✅ Ответ отправлен пользователю"
+            if user_notified
+            else "⚠️ Не удалось отправить ответ пользователю"
+        )
 
         bot.send_message(
             chat_id=chat_id,
@@ -756,3 +769,72 @@ def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id к�
             bot.send_message(chat_id, "❌ Пользователь заблокировал бота")
         else:
             raise
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("block_user_"))
+def handle_block_user(call):
+    user_id = int(call.data.split("_")[2])
+    user = bot.get_chat(user_id)
+
+    try:
+        SubmissionManager.insert_replace_blocked(
+            user_id, user.username, user.first_name, user.last_name
+        )
+
+        bot.answer_callback_query(call.id, "✅ Пользователь заблокирован")
+
+    except Exception as e:
+        logger.error(f"Ошибка блокировки пользователя: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка блокировки")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "show_blocked_users")
+def handle_show_blocked_users(call):
+    try:
+        users = SubmissionManager.select_blocked()
+
+        markup = types.InlineKeyboardMarkup()
+
+        text = "🚫 Заблокированные пользователи:\n\n"
+        for user in users:
+            text += f"👤 {escape_markdown(user[2])}\n"
+            text += f"🔗 @{escape_markdown(user[1]) if user[1] else 'нет'}\n"
+            text += f"🆔 ID: `{user[0]}`\n"
+            text += f"⏱ {user[3]}\n"
+            markup.add(
+                types.InlineKeyboardButton(
+                    f"Разблокировать {user[2]}", callback_data=f"unblock_{user[0]}"
+                )
+            )
+
+        markup.row(
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            )
+        )
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=text,
+            reply_markup=markup,
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка получения списка блокировок: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка загрузки списка")
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("unblock_"))
+def handle_unblock_user(call):
+    user_id = int(call.data.split("_")[1])
+
+    try:
+        SubmissionManager.delete_blocked(user_id)
+
+        bot.answer_callback_query(call.id, "✅ Пользователь разблокирован")
+        handle_show_blocked_users(call)  # Обновляем список
+
+    except Exception as e:
+        logger.error(f"Ошибка разблокировки: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка разблокировки")
