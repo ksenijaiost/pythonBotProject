@@ -190,6 +190,11 @@ class Menu:
         news_menu = types.InlineKeyboardMarkup(row_width=1)
         news_menu.add(
             types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_SITE, url=ConstantLinks.NEWS_LINK
+            )
+        )
+        news_menu.add(
+            types.InlineKeyboardButton(
                 text=ButtonText.USER_NEWS_NEWS,
                 callback_data=ButtonCallback.USER_NEWS_NEWS,
             )

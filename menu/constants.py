@@ -23,6 +23,7 @@ class ButtonText:
     USER_CONTEST_SEND = "🎨 Отправить работу"
     USER_CONTEST_JUDGE = "⚖️ Записаться на судейство"
     # Меню новостей
+    USER_NEWS_SITE = "🌐 Прошлые выпуски"
     USER_NEWS_NEWS = "📰 Отправить новость в газету"
     USER_NEWS_CODE_DREAM = "🛏️ Отправить код сна"
     USER_NEWS_CODE_DLC = "🏡 Отправить код курортного бюро"
@@ -90,6 +91,8 @@ class ConstantLinks:
     SITE = "https://acnh.tilda.ws"
     # Конкурсы
     CONTEST_LINK = "https://acnh.tilda.ws/contest#rules"
+    # Конкурсы
+    NEWS_LINK = "https://acnh.tilda.ws/newspaper"
     # Помощь
     HELP_LINK = "http://acnh.tilda.ws/bot_guide"
 
