@@ -7,7 +7,7 @@ from collections import defaultdict
 from venv import logger
 from telebot import types
 import time
-from database.contest import (
+from database.db_classes import (
     ContestManager,
     ContestSubmission,
     SubmissionManager,
@@ -60,6 +60,16 @@ def is_user_in_chat(user_id):
         logger = logging.getLogger(__name__)
         logger.error(f"Ошибка проверки участника чата: {e}")
         return False
+
+def is_user_blocked(call):
+    if SubmissionManager.is_blocked(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "⚠️ Вы заблокированы ботом\nЕсли считаете это ошибкой, свяжитесь с админами чата",
+            show_alert=True,
+        )
+        return True
+    return False
 
 
 # Система блокировки ввода
@@ -249,6 +259,8 @@ def handle_help(message):
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_GUIDES)
 @private_chat_only(bot)
 def handle_user_guides(call):
+    if is_user_blocked(call):
+        return
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
@@ -301,6 +313,8 @@ def handle_cancel(message):
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_CONTEST)
 @private_chat_only(bot)
 def handle_user_guides(call):
+    if is_user_blocked(call):
+        return
     logger = logging.getLogger(__name__)
     logger.debug(f"Received callback: {call.data}, chat_id: {call.message.chat.id}")
     bot.edit_message_text(
@@ -455,7 +469,7 @@ def start_contest_submission(call):
             )  # Устанавливаем начальный статус
             user_submissions.add(user_id, submission)
 
-            text = "📸 Пришлите работу _до 10 фото без текста, его я попрошу позже_\n"
+            text = "📸 Пришлите работу _до 10 фото без текста, его я попрошу позже_\nОбязательно проверьте, что на фото присутствует кристаллик MO–67KW–B1M9–C352, без него работа может быть отклонена\n"
 
             if SubmissionManager.delete_judge(user_id):
                 text += "\nВы будете удалены из списка судей"
@@ -868,6 +882,8 @@ def handle_new_judge(call):
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TURNIP)
 @private_chat_only(bot)
 def handle_user_turnip(call):
+    if is_user_blocked(call):
+        return
     markup = types.InlineKeyboardMarkup()
     markup.row(
         types.InlineKeyboardButton(
@@ -923,6 +939,8 @@ def handle_cancel(message):
 @lock_input()
 @private_chat_only(bot)
 def handle_user_to_admin(call):
+    if is_user_blocked(call):
+        return
     user_id = call.from_user.id
     if user_id in temp_storage:
         del temp_storage[user_id]
@@ -1195,6 +1213,9 @@ def send_to_admin_chat(user_id, content_data):
         markup.add(
             types.InlineKeyboardButton(
                 "💬 Ответить", callback_data=f"reply_to_{user_id}"
+            ),
+            types.InlineKeyboardButton(
+                "🚫 Заблокировать", callback_data=f"block_user_{user_id}"
             )
         )
 
@@ -1245,6 +1266,8 @@ def send_to_admin_chat(user_id, content_data):
 @lock_input()
 @private_chat_only(bot)
 def handle_user_to_news(call):
+    if is_user_blocked(call):
+        return
     # Проверяем, состоит ли пользователь в чате
     if not is_user_in_chat(call.from_user.id):
         bot.send_message(

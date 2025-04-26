@@ -7,6 +7,7 @@ import time
 
 from menu.constants import UserState
 
+
 class ContestManager:
     def _init_db():
         """Инициализация БД"""
@@ -74,6 +75,15 @@ class ContestManager:
             "CREATE INDEX IF NOT EXISTS idx_submissions_user ON submissions(user_id)"
         )
 
+        # Таблица ЧС
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS blocked_users
+                 (user_id INTEGER PRIMARY KEY,
+                  username TEXT,
+                  full_name TEXT,
+                  blocked_at DATETIME DEFAULT CURRENT_TIMESTAMP)"""
+        )
+
         conn.commit()
         conn.close()
 
@@ -120,7 +130,14 @@ class SubmissionManager:
                 """INSERT INTO submissions 
                     (user_id, username, full_name, photos, caption, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?)""",
-                (user_id, username, full_name, json.dumps(photos), caption, datetime.now().isoformat()),
+                (
+                    user_id,
+                    username,
+                    full_name,
+                    json.dumps(photos),
+                    caption,
+                    datetime.now().isoformat(),
+                ),
             )
             submission_id = c.lastrowid
             conn.commit()
@@ -352,6 +369,52 @@ class SubmissionManager:
         finally:
             conn.close()
 
+    @staticmethod
+    def insert_replace_blocked(user_id, username, first_name, last_name):
+        full_name = f"{first_name or ''} {last_name or ''}".strip()
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute(
+                """INSERT OR REPLACE INTO blocked_users 
+                     (user_id, username, full_name) 
+                     VALUES (?, ?, ?)""",
+                (user_id, username, full_name),
+            )
+            conn.commit()
+        finally:
+            conn.close
+
+    @staticmethod
+    def select_blocked():
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("""SELECT * FROM blocked_users ORDER BY blocked_at DESC""")
+            return c.fetchall()
+        finally:
+            conn.close
+
+    @staticmethod
+    def is_blocked(user_id):
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM blocked_users WHERE user_id = ?", (user_id,))
+            return c.fetchone() is not None
+        finally:
+            conn.close
+
+    @staticmethod
+    def delete_blocked(user_id):
+        conn = sqlite3.connect("database/contests.db")
+        try:
+            c = conn.cursor()
+            c.execute("""DELETE FROM blocked_users WHERE user_id = ?""", (user_id,))
+            conn.commit()
+        finally:
+            conn.close
+
 
 class ContestSubmission:
     def __init__(self):
@@ -375,26 +438,28 @@ class ContestSubmission:
     # Добавим метод для обновления времени активности
     def update_activity(self):
         self.last_activity = time.time()
-        
+
 
 class SubmissionStorage:
     def __init__(self):
         self.data = {}
         self.lock = Lock()
         self.timers = {}
-    
+
     def update_activity(self):
         self.last_activity = time.time()
 
     def add(self, user_id, submission):
         with self.lock:
-            if not hasattr(submission, 'update_activity'):
+            if not hasattr(submission, "update_activity"):
                 raise TypeError("Invalid submission type")
             self.data[user_id] = submission
             # Используем метод обновления активности
             submission.update_activity()
-            self.timers[user_id] = submission.last_activity  # Используем last_activity из Submission
-    
+            self.timers[user_id] = (
+                submission.last_activity
+            )  # Используем last_activity из Submission
+
     # Добавляем новые методы для работы с прогрессом
     def update_progress_message(self, user_id, message_id):
         with self.lock:
@@ -575,7 +640,7 @@ class UserContentStorage:
 
     def update_data(self, user_id, new_data):
         with self.lock:
-            self.data[user_id]=new_data
+            self.data[user_id] = new_data
 
     def clear(self, user_id):
         with self.lock:

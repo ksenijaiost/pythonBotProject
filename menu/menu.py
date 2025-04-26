@@ -220,6 +220,11 @@ class Menu:
         )
         news_menu.add(
             types.InlineKeyboardButton(
+                text=ButtonText.USER_NEWS_SITE, url=ConstantLinks.NEWS_LINK
+            )
+        )
+        news_menu.add(
+            types.InlineKeyboardButton(
                 text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
             )
         )
@@ -251,6 +256,12 @@ class Menu:
             types.InlineKeyboardButton(
                 text=ButtonText.USER_TO_NEWS,
                 callback_data=ButtonCallback.USER_TO_NEWS,
+            )
+        )
+        adm_menu.add(
+            types.InlineKeyboardButton(
+                text=ButtonText.ADM_BLOCK,
+                callback_data=ButtonCallback.ADM_BLOCK,
             )
         )
 

@@ -3,8 +3,8 @@ from telebot import types
 from bot_instance import bot
 import handlers.admin
 import handlers.user
-import database.contest
-from database.contest import user_content_storage
+import database.db_classes
+from database.db_classes import user_content_storage
 from handlers.envParams import admin_ids
 from menu.constants import ButtonCallback
 from menu.menu import Menu

@@ -1,19 +1,21 @@
 import logging
+import re
 from venv import logger
 from datetime import datetime
 import traceback
 from functools import partial
 from telebot import types
 from telebot.apihelper import ApiTelegramException
+from telegram.helpers import escape_markdown
 
-from database.contest import (
+from database.db_classes import (
     ContestManager,
     SubmissionManager,
     get_submission,
     user_submissions,
 )
 from handlers.decorator import private_chat_only
-from handlers.envParams import admin_ids
+from handlers.envParams import admin_ids, news_ids
 from bot_instance import bot
 from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
@@ -26,6 +28,8 @@ logging.basicConfig(
 
 # storage.py
 from threading import Lock
+
+bot_username = bot.get_me().username
 
 
 class TempStorage:
@@ -75,6 +79,16 @@ def check_admin(call):
         return False
     return True
 
+def check_admin_or_news(call):
+    if call.from_user.id not in admin_ids and call.from_user.id not in news_ids:
+        bot.answer_callback_query(
+            call.id,
+            "⚠️ Вы не являетесь админом\n\nВы вообще как сюда попали???",
+            show_alert=True,
+        )
+        return False
+    return True
+
 
 # Меню конкурсов для админа
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_CONTEST)
@@ -109,10 +123,13 @@ def start_contest_update(call):
         markup = types.InlineKeyboardMarkup()
 
         if contest:
-            theme = contest[1]
-            description = contest[2]
-            contest_date = contest[3]
-            end_date_of_admission = contest[4]
+            # Экранируем все динамические данные
+            theme = escape_markdown(contest[1], version=2)
+            description = escape_markdown(contest[2], version=2)
+
+            # Экранируем даты с точками
+            contest_date = escape_markdown(contest[3], version=2)
+            end_date_of_admission = escape_markdown(contest[4], version=2)
 
             text += (
                 f"🏷 Тема: {theme}\n"
@@ -374,13 +391,17 @@ def process_rejection(message, submission_id):
             logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
 
         # Формируем текст для админа
-        status_text = "✅ Пользователь уведомлён" if user_notified else "⚠️ Не удалось уведомить пользователя"
+        status_text = (
+            "✅ Пользователь уведомлён"
+            if user_notified
+            else "⚠️ Не удалось уведомить пользователя"
+        )
 
         bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=message.message_id,
             text=(f"Работа #{submission_id} отклонена\n{status_text}"),
-            reply_markup=Menu.adm_menu()
+            reply_markup=Menu.adm_menu(),
         )
 
         logger.info(
@@ -556,9 +577,9 @@ def show_submission_details(call):
                 media=file_id,  # Передаём строку, а не словарь
                 caption=(
                     f"Работа #{submission_id}\n\n{submission['caption']}"
-                    if i == 0 
+                    if i == 0
                     else None
-                )
+                ),
             )
             media_group.append(media)
 
@@ -617,7 +638,11 @@ def approve_work(call):
         except Exception as user_error:
             logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
         # Формируем текст для админа
-        status_text = "✅ Пользователь уведомлён" if user_notified else "⚠️ Не удалось уведомить пользователя"
+        status_text = (
+            "✅ Пользователь уведомлён"
+            if user_notified
+            else "⚠️ Не удалось уведомить пользователя"
+        )
 
         bot.edit_message_text(
             chat_id=call.message.chat.id,
@@ -680,24 +705,24 @@ admin_replies = {}
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reply_to_"))
 def handle_reply_button(call):
-    if not check_admin(call):
+    if not check_admin_or_news(call):
         return
     try:
         user_id = int(call.data.split("_")[-1])
         bot.answer_callback_query(call.id)
 
         # Сохраняем связь админ -> пользователь !с привязкой к chat.id админа
-        admin_replies[call.message.chat.id] = user_id # <-- Ключом выступает chat.id!
+        admin_replies[call.message.chat.id] = user_id  # <-- Ключом выступает chat.id!
 
         msg = bot.send_message(
             call.message.chat.id,  # Отвечаем в тот же чат
             f"✍️ Введите ответ для пользователя в ответ на это сообщение, то есть реплаем:\n🚫 Для отмены используйте /cancel_adm",
+            reply_markup=types.ForceReply(selective=True),
         )
-        
+
         # Регистрируем следующий шаг с явным указанием чата
         bot.register_next_step_handler(
-            message=msg,
-            callback=partial(process_admin_reply, chat_id=call.message.chat.id)
+            msg, lambda m: process_admin_reply(m) if m.content_type == "text" else None
         )
 
     except Exception as e:
@@ -705,15 +730,49 @@ def handle_reply_button(call):
         bot.answer_callback_query(call.id, "❌ Ошибка", show_alert=True)
 
 
-@bot.message_handler(commands=["cancel_adm"])
-def cancel_reply(call):
-    if call.message.chat.id in admin_replies:
-        del admin_replies[call.message.chat.id]
-    bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id, "Ответ отменён")
-
-def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id как параметр
+@bot.message_handler(
+    commands=["cancel_adm"],
+    regexp=re.compile(rf"^/cancel_adm(?:@{re.escape(bot_username)})?$", re.IGNORECASE).pattern,
+)
+def cancel_reply(message):
     try:
+        chat_id = message.chat.id
+        user_id = message.from_user.id
+
+        # Проверка прав администратора
+        if user_id not in admin_ids and user_id not in news_ids:
+            bot.reply_to(message, "❌ У вас нет прав для этой команды")
+            return
+
+        # Удаление состояния ответа
+        if chat_id in admin_replies:
+            del admin_replies[chat_id]
+
+        # Удаляем сообщение с командой /cancel_adm
+        bot.delete_message(chat_id, message.message_id)
+
+        # Отправляем подтверждение
+        bot.send_message(chat_id, "✅ Ответ отменён", reply_markup=Menu.adm_menu())
+
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_reply: {e}")
+        bot.send_message(chat_id, "⚠️ Ошибка при отмене ответа")
+
+
+def process_admin_reply(message):
+    try:
+        chat_id = message.chat.id
+
+        # Если это команда /cancel_adm - игнорируем, она обрабатывается отдельно
+        if message.text and message.text.startswith("/cancel_adm"):
+            cancel_reply(message)
+            return
+
+        # Проверяем наличие активной сессии
+        if chat_id not in admin_replies:
+            bot.send_message(chat_id, "❌ Сессия ответа устарела")
+            return
+
         # Получаем user_id из хранилища по chat_id
         user_id = admin_replies.get(chat_id)
 
@@ -734,7 +793,18 @@ def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id к�
         except Exception as user_error:
             logger.error(f"Не удалось уведомить пользователя {user_id}: {user_error}")
         # Формируем текст для админа
-        status_text = "✅ Ответ отправлен пользователю" if user_notified else "⚠️ Не удалось отправить ответ пользователю"
+        status_text = (
+            "✅ Ответ отправлен пользователю"
+            if user_notified
+            else "⚠️ Не удалось отправить ответ пользователю"
+        )
+
+        # Удаляем служебные сообщения
+        try:
+            bot.delete_message(chat_id, message.message_id)
+            bot.delete_message(chat_id, message.reply_to_message.message_id)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщения: {e}")
 
         bot.send_message(
             chat_id=chat_id,
@@ -752,3 +822,72 @@ def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id к�
             bot.send_message(chat_id, "❌ Пользователь заблокировал бота")
         else:
             raise
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("block_user_"))
+def handle_block_user(call):
+    user_id = int(call.data.split("_")[2])
+    user = bot.get_chat(user_id)
+
+    try:
+        SubmissionManager.insert_replace_blocked(
+            user_id, user.username, user.first_name, user.last_name
+        )
+
+        bot.answer_callback_query(call.id, "✅ Пользователь заблокирован")
+
+    except Exception as e:
+        logger.error(f"Ошибка блокировки пользователя: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка блокировки")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.ADM_BLOCK)
+def handle_show_blocked_users(call):
+    try:
+        users = SubmissionManager.select_blocked()
+
+        markup = types.InlineKeyboardMarkup()
+
+        text = "🚫 Заблокированные пользователи:\n\n"
+        for user in users:
+            text += f"👤 {user[2]}\n"
+            text += f"🔗 @{user[1] if user[1] else 'нет'}\n"
+            text += f"🆔 ID: `{user[0]}`\n"
+            text += f"⏱ {user[3]}\n"
+            markup.add(
+                types.InlineKeyboardButton(
+                    f"Разблокировать {user[2]}", callback_data=f"unblock_{user[0]}"
+                )
+            )
+
+        markup.row(
+            types.InlineKeyboardButton(
+                text=ButtonText.MAIN_MENU, callback_data=ButtonCallback.MAIN_MENU
+            )
+        )
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=text,
+            reply_markup=markup,
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка получения списка блокировок: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка загрузки списка")
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("unblock_"))
+def handle_unblock_user(call):
+    user_id = int(call.data.split("_")[1])
+
+    try:
+        SubmissionManager.delete_blocked(user_id)
+
+        bot.answer_callback_query(call.id, "✅ Пользователь разблокирован")
+        handle_show_blocked_users(call)  # Обновляем список
+
+    except Exception as e:
+        logger.error(f"Ошибка разблокировки: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка разблокировки")
