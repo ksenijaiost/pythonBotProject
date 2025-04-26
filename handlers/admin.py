@@ -1,4 +1,5 @@
 import logging
+import re
 from venv import logger
 from datetime import datetime
 import traceback
@@ -14,7 +15,7 @@ from database.db_classes import (
     user_submissions,
 )
 from handlers.decorator import private_chat_only
-from handlers.envParams import admin_ids
+from handlers.envParams import admin_ids, news_ids
 from bot_instance import bot
 from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
@@ -27,6 +28,8 @@ logging.basicConfig(
 
 # storage.py
 from threading import Lock
+
+bot_username = bot.get_me().username
 
 
 class TempStorage:
@@ -68,6 +71,16 @@ ADMIN_STEPS = {
 
 def check_admin(call):
     if call.from_user.id not in admin_ids:
+        bot.answer_callback_query(
+            call.id,
+            "⚠️ Вы не являетесь админом\n\nВы вообще как сюда попали???",
+            show_alert=True,
+        )
+        return False
+    return True
+
+def check_admin_or_news(call):
+    if call.from_user.id not in admin_ids and call.from_user.id not in news_ids:
         bot.answer_callback_query(
             call.id,
             "⚠️ Вы не являетесь админом\n\nВы вообще как сюда попали???",
@@ -692,7 +705,7 @@ admin_replies = {}
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reply_to_"))
 def handle_reply_button(call):
-    if not check_admin(call):
+    if not check_admin_or_news(call):
         return
     try:
         user_id = int(call.data.split("_")[-1])
@@ -704,12 +717,12 @@ def handle_reply_button(call):
         msg = bot.send_message(
             call.message.chat.id,  # Отвечаем в тот же чат
             f"✍️ Введите ответ для пользователя в ответ на это сообщение, то есть реплаем:\n🚫 Для отмены используйте /cancel_adm",
+            reply_markup=types.ForceReply(selective=True),
         )
 
         # Регистрируем следующий шаг с явным указанием чата
         bot.register_next_step_handler(
-            message=msg,
-            callback=partial(process_admin_reply, chat_id=call.message.chat.id),
+            msg, lambda m: process_admin_reply(m) if m.content_type == "text" else None
         )
 
     except Exception as e:
@@ -717,16 +730,49 @@ def handle_reply_button(call):
         bot.answer_callback_query(call.id, "❌ Ошибка", show_alert=True)
 
 
-@bot.message_handler(commands=["cancel_adm"])
-def cancel_reply(call):
-    if call.message.chat.id in admin_replies:
-        del admin_replies[call.message.chat.id]
-    bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.answer_callback_query(call.id, "Ответ отменён")
-
-
-def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id как параметр
+@bot.message_handler(
+    commands=["cancel_adm"],
+    regexp=re.compile(rf"^/cancel_adm(?:@{re.escape(bot_username)})?$", re.IGNORECASE).pattern,
+)
+def cancel_reply(message):
     try:
+        chat_id = message.chat.id
+        user_id = message.from_user.id
+
+        # Проверка прав администратора
+        if user_id not in admin_ids and user_id not in news_ids:
+            bot.reply_to(message, "❌ У вас нет прав для этой команды")
+            return
+
+        # Удаление состояния ответа
+        if chat_id in admin_replies:
+            del admin_replies[chat_id]
+
+        # Удаляем сообщение с командой /cancel_adm
+        bot.delete_message(chat_id, message.message_id)
+
+        # Отправляем подтверждение
+        bot.send_message(chat_id, "✅ Ответ отменён", reply_markup=Menu.adm_menu())
+
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_reply: {e}")
+        bot.send_message(chat_id, "⚠️ Ошибка при отмене ответа")
+
+
+def process_admin_reply(message):
+    try:
+        chat_id = message.chat.id
+
+        # Если это команда /cancel_adm - игнорируем, она обрабатывается отдельно
+        if message.text and message.text.startswith("/cancel_adm"):
+            cancel_reply(message)
+            return
+
+        # Проверяем наличие активной сессии
+        if chat_id not in admin_replies:
+            bot.send_message(chat_id, "❌ Сессия ответа устарела")
+            return
+
         # Получаем user_id из хранилища по chat_id
         user_id = admin_replies.get(chat_id)
 
@@ -752,6 +798,13 @@ def process_admin_reply(message, chat_id):  # <-- Добавляем chat_id к�
             if user_notified
             else "⚠️ Не удалось отправить ответ пользователю"
         )
+
+        # Удаляем служебные сообщения
+        try:
+            bot.delete_message(chat_id, message.message_id)
+            bot.delete_message(chat_id, message.reply_to_message.message_id)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщения: {e}")
 
         bot.send_message(
             chat_id=chat_id,
