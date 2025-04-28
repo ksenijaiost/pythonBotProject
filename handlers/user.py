@@ -61,6 +61,7 @@ def is_user_in_chat(user_id):
         logger.error(f"Ошибка проверки участника чата: {e}")
         return False
 
+
 def is_user_blocked(call):
     if SubmissionManager.is_blocked(call.from_user.id):
         bot.answer_callback_query(
@@ -463,17 +464,65 @@ def start_contest_submission(call):
 
             user_id = call.from_user.id
             submission = ContestSubmission()
+
+            text = "Должен Вас предупредить:\n"
+            text += "\n⚠️ Подготовьте работу полностью, напишите текст к работе заранее,_ например, в заметках_, так как время на отправку ограничено\n"
+            text += "\n⚠️ Обязательно проверьте, что на фото присутствует кристаллик MO–67KW–B1M9–C352, без него работа может быть отклонена\n"
+            if SubmissionManager.delete_judge(user_id):
+                text += "\n⚠️ Ещё вижу, что у Вас есть заявка на судейство – при отправке работы Вы будете удалены из списка судей"
+
+            markup = types.InlineKeyboardMarkup()
+            markup.row(
+                types.InlineKeyboardButton(
+                    text="✅ Начать отправку", callback_data=f"contest_start:{user_id}"
+                )
+            )
+            markup.row(
+                types.InlineKeyboardButton(
+                    text="🚫 Отменить", callback_data=f"contest_cancel:{user_id}"
+                )
+            )
+            markup.row(
+                types.InlineKeyboardButton(
+                    text=ButtonText.USER_HELP_SITE, url=ConstantLinks.HELP_LINK
+                )
+            )
+
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=text,
+                reply_markup=markup,
+                parse_mode="MarkdownV2",
+            )
+
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Ошибка начала отправки: {e}")
+        handle_submission_error(call.from_user.id, e)
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith(("contest_start", "contest_cancel"))
+)
+@lock_input()
+def handle_contest_start(call):
+    try:
+        action, user_id = call.data.split(":")
+        user_id = int(user_id)
+
+        # Удаляем сообщение с кнопками
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+
+        if action == "contest_start":
+            submission = ContestSubmission()
             bot.set_state(user_id, UserState.WAITING_CONTEST_PHOTOS)
-            submission.status = (
-                UserState.WAITING_CONTEST_PHOTOS
-            )  # Устанавливаем начальный статус
+            submission.status = UserState.WAITING_CONTEST_PHOTOS
+            # Устанавливаем начальный статус
             user_submissions.add(user_id, submission)
 
-            text = "📸 Пришлите работу _до 10 фото без текста, его я попрошу позже_\nОбязательно проверьте, что на фото присутствует кристаллик MO–67KW–B1M9–C352, без него работа может быть отклонена\n"
-
-            if SubmissionManager.delete_judge(user_id):
-                text += "\nВы будете удалены из списка судей"
-
+            text = "📸 Пришлите работу _до 10 фото без текста, его я попрошу позже_\n"
+            text += "Обязательно проверьте, что на фото присутствует кристаллик MO–67KW–B1M9–C352, без него работа может быть отклонена\n"
             text += "\n🚫 Для отмены используйте /cancel"
 
             bot.send_message(
@@ -482,10 +531,15 @@ def start_contest_submission(call):
                 parse_mode="MarkdownV2",
             )
 
+        elif action == "contest_cancel":
+            bot.send_message(
+                chat_id=user_id,
+                text="❌ Отправка отменена",
+                reply_markup=Menu.contests_menu(),
+            )
+
     except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f"Ошибка начала отправки: {e}")
-        handle_submission_error(call.from_user.id, e)
+        logger.error(f"Confirmation error: {e}")
 
 
 # Обработчик отправки работ
@@ -601,7 +655,7 @@ def request_contest_description(user_id):
 
     bot.send_message(
         user_id,
-        "📝 Теперь отправьте текст для работы:\n"
+        "📝 Теперь отправьте текст для работы, если его нет, напишите «Без текста»:\n"
         "Можно использовать эмодзи _не премиум_\n"
         "Максимум 1000 символов\n\n"
         "🚫 Для отмены используйте /cancel",
@@ -1216,7 +1270,7 @@ def send_to_admin_chat(user_id, content_data):
             ),
             types.InlineKeyboardButton(
                 "🚫 Заблокировать", callback_data=f"block_user_{user_id}"
-            )
+            ),
         )
 
         if photos:
