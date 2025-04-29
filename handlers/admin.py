@@ -15,7 +15,7 @@ from database.db_classes import (
     user_submissions,
 )
 from handlers.decorator import private_chat_only
-from handlers.envParams import admin_ids, news_ids
+from handlers.envParams import get_admins, get_news_workers
 from bot_instance import bot
 from menu.constants import ButtonCallback, ButtonText
 from menu.menu import Menu
@@ -70,7 +70,7 @@ ADMIN_STEPS = {
 
 
 def check_admin(call):
-    if call.from_user.id not in admin_ids:
+    if call.from_user.id not in get_admins():
         bot.answer_callback_query(
             call.id,
             "⚠️ Вы не являетесь админом\n\nВы вообще как сюда попали???",
@@ -79,8 +79,12 @@ def check_admin(call):
         return False
     return True
 
+
 def check_admin_or_news(call):
-    if call.from_user.id not in admin_ids and call.from_user.id not in news_ids:
+    if (
+        call.from_user.id not in get_admins()
+        and call.from_user.id not in get_news_workers()
+    ):
         bot.answer_callback_query(
             call.id,
             "⚠️ Вы не являетесь админом\n\nВы вообще как сюда попали???",
@@ -732,7 +736,9 @@ def handle_reply_button(call):
 
 @bot.message_handler(
     commands=["cancel_adm"],
-    regexp=re.compile(rf"^/cancel_adm(?:@{re.escape(bot_username)})?$", re.IGNORECASE).pattern,
+    regexp=re.compile(
+        rf"^/cancel_adm(?:@{re.escape(bot_username)})?$", re.IGNORECASE
+    ).pattern,
 )
 def cancel_reply(message):
     try:
@@ -740,7 +746,7 @@ def cancel_reply(message):
         user_id = message.from_user.id
 
         # Проверка прав администратора
-        if user_id not in admin_ids and user_id not in news_ids:
+        if user_id not in get_admins() and user_id not in get_news_workers():
             bot.reply_to(message, "❌ У вас нет прав для этой команды")
             return
 

@@ -1,11 +1,12 @@
 from telebot import types
-
 from menu.constants import ButtonText, ButtonCallback, ConstantLinks
 from menu.links import Links
+from functools import lru_cache
 
 
 class Menu:
     @staticmethod
+    @lru_cache(maxsize=32)
     def back_only_main_menu():
         """Общее меню - назад в главное"""
         back_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -18,6 +19,7 @@ class Menu:
         return back_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def user_to_admin_or_main_menu():
         """Пользовательское меню - написать админам или назад в главное"""
         back_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -34,6 +36,7 @@ class Menu:
         return back_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def back_user_contest_menu():
         """Пользовательское меню - назад к конкурсам"""
         back_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -49,6 +52,7 @@ class Menu:
         return back_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def back_user_guide_menu():
         """Пользовательское меню - назад к гайдам"""
         back_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -64,6 +68,7 @@ class Menu:
         return back_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def back_adm_contest_menu():
         """Административное меню - назад к конкурсам"""
         back_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -79,6 +84,7 @@ class Menu:
         return back_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def user_menu():
         """Пользовательское меню - главное"""
         user_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -131,6 +137,7 @@ class Menu:
         return user_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def guides_menu():
         """Пользовательское меню гайдов"""
         guides_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -155,6 +162,7 @@ class Menu:
 
     # Меню конкурсов
     @staticmethod
+    @lru_cache(maxsize=32)
     def contests_menu():
         """Пользовательское меню конкурсов"""
         contests_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -185,6 +193,7 @@ class Menu:
         return contests_menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def news_menu():
         """Пользовательское меню отправки новостей"""
         news_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -233,6 +242,7 @@ class Menu:
     # Административное меню
     # Главное меню
     @staticmethod
+    @lru_cache(maxsize=32)
     def adm_menu():
         """Административное меню"""
         adm_menu = types.InlineKeyboardMarkup(row_width=1)
@@ -269,6 +279,7 @@ class Menu:
 
     # Меню конкурсов (адм)
     @staticmethod
+    @lru_cache(maxsize=32)
     def adm_contests_menu():
         """Административное меню конкурсов"""
         menu = types.InlineKeyboardMarkup()
@@ -295,6 +306,7 @@ class Menu:
         return menu
 
     @staticmethod
+    @lru_cache(maxsize=32)
     def adm_stat_menu():
         menu = types.InlineKeyboardMarkup()
         menu.add(

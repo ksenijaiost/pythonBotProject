@@ -1,3 +1,8 @@
+class MenuTexts:
+    USER_WELCOME = "✨ Добро пожаловать 😊\nВыберите действие:"
+    ADMIN_WELCOME = "✨ Добро пожаловать, администратор 👑\nВыберите действие:"
+
+
 class ButtonText:
     # Кнопки назад
     BACK = "🔙 Назад"
