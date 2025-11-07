@@ -1,4 +1,4 @@
-from telebot import types
+import telebot.types as types
 
 
 # Декоратор проверки приватности чата

@@ -2,11 +2,9 @@ import logging
 import re
 from venv import logger
 from datetime import datetime
-import traceback
-from functools import partial
-from telebot import types
+import telebot.types as types
 from telebot.apihelper import ApiTelegramException
-from telegram.helpers import escape_markdown
+from utils.markdown_utils import escape_markdown_v2, safe_markdown_v2
 
 from database.db_classes import (
     ContestManager,
@@ -124,12 +122,12 @@ def start_contest_update(call):
 
         if contest:
             # Экранируем все динамические данные
-            theme = escape_markdown(contest[1], version=2)
-            description = escape_markdown(contest[2], version=2)
+            theme = escape_markdown_v2(contest[1])
+            description = escape_markdown_v2(contest[2])
 
             # Экранируем даты с точками
-            contest_date = escape_markdown(contest[3], version=2)
-            end_date_of_admission = escape_markdown(contest[4], version=2)
+            contest_date = escape_markdown_v2(contest[3])
+            end_date_of_admission = escape_markdown_v2(contest[4])
 
             text += (
                 f"🏷 Тема: {theme}\n"
@@ -156,7 +154,7 @@ def start_contest_update(call):
                 ),
             )
         else:
-            text += "⚠️ Активных конкурсов не найдено\nХотите создать новый?"
+            text += safe_markdown_v2("⚠️ Активных конкурсов не найдено\nХотите создать новый?")
             markup.row(
                 types.InlineKeyboardButton(
                     "➕ Создать новый", callback_data="confirm_update"
@@ -194,7 +192,7 @@ def handle_cancel_update(call):
 @bot.callback_query_handler(func=lambda call: call.data == "reset_info")
 def handle_reset_info(call):
     markup = types.InlineKeyboardMarkup()
-    text = "Точно очистить данные с информацией о текущем конкурсе?"
+    text = safe_markdown_v2("Точно очистить данные с информацией о текущем конкурсе?")
     markup.row(
         types.InlineKeyboardButton(
             "✅ Да, очистить", callback_data="confirm_reset_info"
@@ -319,7 +317,7 @@ def handle_show_participants(call):
     participants = SubmissionManager.get_all_submissions_with_info()
     if not participants:
         bot.edit_message_text(
-            text=("❌ Нет данных об участниках"),
+            text=safe_markdown_v2("❌ Нет данных об участниках"),
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
             parse_mode="MarkdownV2",
@@ -352,7 +350,7 @@ def handle_show_judges(call):
     judges = SubmissionManager.get_all_judges_with_info()
     if not judges:
         bot.edit_message_text(
-            text=("❌ Нет данных о судьях"),
+            text=safe_markdown_v2("❌ Нет данных о судьях"),
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
             parse_mode="MarkdownV2",
@@ -417,10 +415,10 @@ def process_rejection(message, submission_id):
 
 def handle_admin_error(chat_id, error):
     """Обработка ошибок в админских функциях"""
-    error_msg = (
-        "⚠️ *Ошибка администратора*\n"
+    error_msg = safe_markdown_v2(
+        f"⚠️ *Ошибка администратора*\n"
         f"```{str(error)}```\n"
-        "Пожалуйста, проверьте логи для деталей"
+        f"Пожалуйста, проверьте логи для деталей"
     )
 
     try:

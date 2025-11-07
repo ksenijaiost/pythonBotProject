@@ -1,4 +1,4 @@
-from telebot import types
+import telebot.types as types
 
 from menu.constants import ButtonText, ButtonCallback, ConstantLinks
 from menu.links import Links

@@ -59,6 +59,7 @@ class ButtonCallback:
     USER_TO_ADMIN = "user_to_admin"
     USER_TO_NEWS = "user_to_news"
     USER_TURNIP = "user_turnip"
+    USER_MAIN_MENU = "user_main_menu"
     # Меню гайдов
     USER_FIND_GUIDE = "user_find_guide"
     # Меню конкурсов
@@ -66,6 +67,8 @@ class ButtonCallback:
     USER_CONTEST_SEND = "user_contest_send"
     USER_CONTEST_JUDGE = "user_contest_judge"
     # Меню новостей
+    USER_NEWS = "user_news"
+    USER_NEWS_SEND = "user_news_send"
     USER_NEWS_NEWS = "user_news_news"
     USER_NEWS_CODE_DREAM = "user_news_code_dream"
     USER_NEWS_CODE_DLC = "user_news_code_dlc"
@@ -77,8 +80,13 @@ class ButtonCallback:
     ADM_TURNIP = "adm_turnip"
     ADM_ADD_GUIDE = "adm_add_guide"
     ADM_BLOCK = "adm_show_blocked_users"
+    ADM_MAIN_MENU = "adm_main_menu"
+    ADM_USERS = "adm_users"
     # Меню конкурсов
     ADM_CONTEST_INFO = "adm_contest_info"
+    ADM_CONTEST_CURRENT = "adm_contest_current"
+    ADM_CONTEST_CREATE = "adm_contest_create"
+    ADM_CONTEST_SUBMISSIONS = "adm_contest_submissions"
     ADM_CONTEST_RESET = "adm_consest_reset"
     ADM_REVIEW_WORKS = "adm_review_works"
     ADM_CONTEST_STATS = "adm_stats"
@@ -86,6 +94,11 @@ class ButtonCallback:
     ADM_SHOW_JUDGES = "adm_show_judges"
     ADM_APPROVE = "adm_approve_"
     ADM_REJECT = "adm_reject_"
+    # Меню пользователей
+    ADM_USERS_BLOCKED = "adm_users_blocked"
+    ADM_USERS_APPROVED = "adm_users_approved"
+    ADM_USERS_JUDGES = "adm_users_judges"
+    ADM_USERS_STATS = "adm_users_stats"
 
 
 class ConstantLinks:
@@ -122,6 +135,11 @@ class UserState:
     WAITING_DESIGN_CODE = 'waiting_design_code'
     WAITING_DESIGN_DESIGN_SCREEN = 'waiting_design_design_screen'
     WAITING_DESIGN_GAME_SCREENS = 'waiting_design_game_screens'
+    
+    WAITING_GUIDE_SEARCH = 'waiting_guide_search'
+    ADMIN_CREATING_CONTEST = 'admin_creating_contest'
+    WAITING_NEWS_TEXT = 'waiting_news_text'
+    WAITING_NEWS_PHOTO = 'waiting_news_photo'
 
 MONTHS_RU = {
     1: "января",

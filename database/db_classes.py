@@ -4,13 +4,37 @@ import sqlite3
 import os
 from threading import Lock
 import time
+import logging
 
 from menu.constants import UserState
 
+# Импортируем оптимизированные классы
+try:
+    from .db_connection import initialize_connection_pool, get_connection_pool
+    from .db_classes_optimized import (
+        OptimizedContestManager, 
+        OptimizedSubmissionManager, 
+        OptimizedJudgeManager,
+        DatabaseManager
+    )
+    OPTIMIZED_DB_AVAILABLE = True
+except ImportError:
+    OPTIMIZED_DB_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
 
 class ContestManager:
+    @staticmethod
     def _init_db():
         """Инициализация БД"""
+        if OPTIMIZED_DB_AVAILABLE:
+            # Используем оптимизированную версию
+            initialize_connection_pool("database/contests.db")
+            OptimizedContestManager.initialize_database()
+            return
+        
+        # Старая версия для совместимости
         if not os.path.exists("database"):
             os.makedirs("database")
 
@@ -122,7 +146,11 @@ class ContestManager:
 class SubmissionManager:
     @staticmethod
     def create_submission(user_id, username, full_name, photos, caption):
-
+        if OPTIMIZED_DB_AVAILABLE:
+            # Используем оптимизированную версию
+            return OptimizedSubmissionManager.create_submission(user_id, username, full_name, photos, caption)
+        
+        # Старая версия для совместимости
         conn = sqlite3.connect("database/contests.db")
         try:
             c = conn.cursor()
@@ -147,6 +175,11 @@ class SubmissionManager:
 
     @staticmethod
     def get_pending_submissions():
+        if OPTIMIZED_DB_AVAILABLE:
+            # Используем оптимизированную версию
+            return OptimizedSubmissionManager.get_pending_submissions()
+        
+        # Старая версия для совместимости
         conn = sqlite3.connect("database/contests.db")
         c = conn.cursor()
         c.execute("SELECT id, user_id FROM submissions WHERE status = 'pending'")
@@ -156,6 +189,11 @@ class SubmissionManager:
 
     @staticmethod
     def update_submission(submission_id, status, reason=None):
+        if OPTIMIZED_DB_AVAILABLE:
+            # Используем оптимизированную версию
+            return OptimizedSubmissionManager.update_submission(submission_id, status, reason)
+        
+        # Старая версия для совместимости
         conn = sqlite3.connect("database/contests.db")
         c = conn.cursor()
         c.execute(

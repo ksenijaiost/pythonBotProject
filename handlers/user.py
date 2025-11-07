@@ -2,11 +2,13 @@ from datetime import datetime
 import logging
 import threading
 import re
-from telebot.apihelper import ApiTelegramException
 from collections import defaultdict
 from venv import logger
-from telebot import types
+import telebot.types as types
 import time
+from utils.markdown_utils import escape_markdown_v2, safe_markdown_v2, format_markdown_v2_with_preserved_formatting
+from utils.simple_locks import simple_lock, quick_lock, media_lock
+from utils.user_utils import create_user_info_text, create_confirmation_markup, deduplicate_photos
 from database.db_classes import (
     ContestManager,
     ContestSubmission,
@@ -34,10 +36,6 @@ from menu.constants import (
     ConstantLinks,
     UserState,
 )
-
-
-from threading import Lock
-from weakref import WeakValueDictionary
 
 logging.basicConfig(
     filename="bot.log",
@@ -73,113 +71,7 @@ def is_user_blocked(call):
     return False
 
 
-# Система блокировки ввода
-class UserLock:
-    def __init__(self):
-        self.locks = defaultdict(Lock)  # Базовые блокировки по user_id
-        self.media_group_locks = defaultdict(
-            Lock
-        )  # Отдельные блокировки для медиагрупп
-        self.current_media_groups = {}  # Текущие обрабатываемые медиагруппы
-        self.global_lock = Lock()
-        self.last_activity = {}  # Добавляем недостающий атрибут
-
-    def acquire(self, user_id: int) -> bool:
-        """Пытается захватить блокировку для пользователя"""
-        with self.global_lock:
-            acquired = self.locks[user_id].acquire(blocking=False)
-            if acquired:
-                self.last_activity[user_id] = time.time()  # Обновляем время активности
-            return acquired
-
-    def release(self, user_id: int) -> None:
-        """Освобождает блокировку пользователя"""
-        with self.global_lock:
-            if user_id in self.locks:
-                try:
-                    self.locks[user_id].release()
-                    self.last_activity[user_id] = time.time()  # Обновляем время
-                except RuntimeError:
-                    pass  # Игнорируем ошибку повторного освобождения
-
-    def acquire_for_media_group(self, user_id: int, media_group_id: str) -> bool:
-        """Захват блокировки для медиагруппы"""
-        if media_group_id in self.current_media_groups.get(user_id, set()):
-            return True  # Уже обрабатывается
-        with self.locks[user_id]:
-            self.current_media_groups.setdefault(user_id, set()).add(media_group_id)
-            return self.media_group_locks[media_group_id].acquire(blocking=False)
-
-    def release_media_group(self, user_id: int, media_group_id: str):
-        """Освобождение блокировки медиагруппы"""
-        with self.locks[user_id]:
-            if media_group_id in self.current_media_groups.get(user_id, set()):
-                self.media_group_locks[media_group_id].release()
-                self.current_media_groups[user_id].remove(media_group_id)
-
-    def cleanup(self, max_age=300):
-        """Удаляет неактивные блокировки старше max_age секунд"""
-        with self.global_lock:
-            now = time.time()
-            # Создаем копию ключей для безопасной итерации
-            for user_id in list(self.last_activity.keys()):
-                if now - self.last_activity.get(user_id, 0) > max_age:
-                    del self.locks[user_id]
-                    del self.last_activity[user_id]
-
-
-# Инициализируем глобальный экземпляр
-user_locks = UserLock()
-
-
-def lock_input(allow_media_groups: bool = False):
-    """Декоратор с поддержкой медиагрупп"""
-
-    def decorator(func):
-        def wrapper(message_or_call):
-            user_id = message_or_call.from_user.id
-            media_group_id = getattr(message_or_call, "media_group_id", None)
-
-            # Для медиагрупп используем специальные блокировки
-            if allow_media_groups and media_group_id:
-                if not user_locks.acquire_for_media_group(user_id, media_group_id):
-                    return
-            else:
-                if not user_locks.acquire(user_id):
-                    error_msg = (
-                        "⏳ Пожалуйста, дождитесь завершения предыдущей операции"
-                    )
-                    if hasattr(message_or_call, "message"):
-                        bot.answer_callback_query(message_or_call.id, error_msg)
-                    else:
-                        bot.reply_to(message_or_call, error_msg)
-                    return
-
-            try:
-                return func(message_or_call)
-            finally:
-                if allow_media_groups and media_group_id:
-                    user_locks.release_media_group(user_id, media_group_id)
-                else:
-                    user_locks.release(user_id)
-
-        return wrapper
-
-    return decorator
-
-
-# Функция для фоновой очистки
-def run_cleanup():
-    while True:
-        try:
-            user_locks.cleanup()
-        except Exception as e:
-            logger.error(f"Cleanup error: {str(e)}")
-        time.sleep(60)  # Проверка каждую минуту
-
-
-# Запуск в отдельном потоке
-threading.Thread(target=run_cleanup, daemon=True).start()
+# Старая система блокировок заменена на utils.simple_locks
 
 
 # Сбор "Юзер инфо"
@@ -208,8 +100,8 @@ def handle_help(message):
     current_state = bot.get_state(user_id)
 
     # Отправляем помощь, НЕ сбрасывая состояние
-    help_text = (
-        "❓ *Помощь по боту*\n\n\n"
+    help_text = safe_markdown_v2(
+        f"❓ *Помощь по боту*\n\n\n"
         f"*{ButtonText.USER_GUIDES}*: гайды по Animal Crossing и не только;\n\n"
         f"*{ButtonText.USER_CONTEST}*: всё о конкурсах:\n"
         f"*{ButtonText.USER_CONTEST_INFO}*: информация об актуальном конкурсе, правила и прошлые конкурсы,\n"
@@ -243,7 +135,7 @@ def handle_help(message):
             )
         )
 
-    help_text += "\n\n📚 Полная инструкция на нашем сайте доступна по кнопке ниже"
+    help_text += safe_markdown_v2("\n\n📚 Полная инструкция на нашем сайте доступна по кнопке ниже")
 
     bot.send_message(
         user_id,
@@ -299,7 +191,7 @@ def handle_user_find_guide(call):
         UserState.WAITING_CONTEST_PREVIEW,
     ],
 )
-def handle_cancel(message):
+def handle_cancel_contest(message):
     user_id = message.from_user.id
     if user_submissions.exists(user_id):
         user_submissions.remove(user_id)
@@ -337,7 +229,7 @@ def format_date_ru(date_str: str) -> str:
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_CONTEST_INFO,
 )
-@lock_input()
+@simple_lock()
 @private_chat_only(bot)
 def handle_user_contest_info(call):
     try:
@@ -414,7 +306,7 @@ SUBMISSION_TIMEOUT = 300  # 5 минут на подтверждение
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_CONTEST_SEND,
 )
-@lock_input()
+@simple_lock()
 @private_chat_only(bot)
 def start_contest_submission(call):
     try:
@@ -505,7 +397,7 @@ def start_contest_submission(call):
 @bot.callback_query_handler(
     func=lambda call: call.data.startswith(("contest_start", "contest_cancel"))
 )
-@lock_input()
+@quick_lock
 def handle_contest_start(call):
     try:
         action, user_id = call.data.split(":")
@@ -549,7 +441,7 @@ def handle_contest_start(call):
     func=lambda m: user_submissions.exists(m.from_user.id)
     and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_PHOTOS,
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_contest_photos(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
@@ -619,7 +511,7 @@ def handle_contest_photos(message):
     func=lambda m: user_submissions.exists(m.from_user.id)
     and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_PHOTOS,
 )
-@lock_input()
+@simple_lock()
 def handle_done_contest_photos(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
@@ -655,10 +547,12 @@ def request_contest_description(user_id):
 
     bot.send_message(
         user_id,
-        "📝 Теперь отправьте текст для работы, если его нет, напишите «Без текста»:\n"
-        "Можно использовать эмодзи _не премиум_\n"
-        "Максимум 1000 символов\n\n"
-        "🚫 Для отмены используйте /cancel",
+        safe_markdown_v2(
+            "📝 Теперь отправьте текст для работы, если его нет, напишите «Без текста»:\n"
+            "Можно использовать эмодзи _не премиум_\n"
+            "Максимум 1000 символов\n\n"
+            "🚫 Для отмены используйте /cancel"
+        ),
         parse_mode="MarkdownV2",
     )
 
@@ -668,7 +562,7 @@ def request_contest_description(user_id):
     func=lambda m: user_submissions.exists(m.from_user.id)
     and user_submissions.get(m.from_user.id).status == UserState.WAITING_CONTEST_TEXT,
 )
-@lock_input()
+@simple_lock()
 def handle_text(message):
     user_id = message.from_user.id
     submission = user_submissions.get(user_id)
@@ -714,7 +608,7 @@ def handle_text(message):
 
 # Обработчик ответов
 @bot.callback_query_handler(func=lambda call: call.data.startswith("send_by_bot_"))
-@lock_input()
+@simple_lock()
 def handle_send_method(call):
     user_id = call.from_user.id
     if not user_submissions.exists(user_id):
@@ -790,7 +684,7 @@ def handle_send_method(call):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "cancel_submission")
-@lock_input()
+@quick_lock
 def handle_cancel_submission(call):
     user_id = call.from_user.id
     try:
@@ -864,9 +758,11 @@ def handle_contest_judje(call):
         ),
     )
     bot.edit_message_text(
-        f"Вы хотите записаться на судейство ближайшего конкурса?\n\n"
-        "❗Напоминаю, что нельзя быть одновременно и судьёй, и участником: _при записи участником, запись на судейство аннулируется_\n\n"
-        '⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса: 🚫_для отмены ранее поданной заявки напишите выберите "сообщение админам" в главном меню_',
+        safe_markdown_v2(
+            f"Вы хотите записаться на судейство ближайшего конкурса?\n\n"
+            f"❗Напоминаю, что нельзя быть одновременно и судьёй, и участником: _при записи участником, запись на судейство аннулируется_\n\n"
+            f'⚠️Заявки рассматриваются админами вручную ближе к дате проведения конкурса: 🚫_для отмены ранее поданной заявки напишите выберите "сообщение админам" в главном меню_'
+        ),
         call.message.chat.id,
         call.message.message_id,
         parse_mode="MarkdownV2",
@@ -973,10 +869,33 @@ def handle_user_turnip(call):
         UserState.WAITING_DESIGN_GAME_SCREENS,
     ],
 )
-def handle_cancel(message):
+def handle_cancel_news(message):
     user_id = message.from_user.id
     user_content_storage.clear(user_id)
     bot.delete_state(user_id)
+    
+    # Пытаемся обновить предыдущее сообщение с клавиатурой
+    try:
+        # Ищем предыдущее сообщение с клавиатурой
+        chat_id = message.chat.id
+        message_id = message.message_id - 1
+        
+        # Проверяем, есть ли предыдущее сообщение с клавиатурой
+        if message_id > 0:
+            bot.edit_message_text(
+                "🚫 Отправка отменена",
+                chat_id,
+                message_id,
+                reply_markup=Menu.back_only_main_menu()
+            )
+            if user_id in temp_storage:
+                del temp_storage[user_id]
+            return
+    except Exception:
+        # Если не удалось обновить, отправляем новое сообщение
+        pass
+    
+    # Отправляем новое сообщение
     bot.send_message(
         message.chat.id,
         "🚫 Отправка отменена",
@@ -990,7 +909,7 @@ def handle_cancel(message):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_ADMIN)
-@lock_input()
+@simple_lock()
 @private_chat_only(bot)
 def handle_user_to_admin(call):
     if is_user_blocked(call):
@@ -1007,8 +926,10 @@ def handle_user_to_admin(call):
 
     bot.send_message(
         call.message.chat.id,
-        "📤 Пришлите *текст*, который хотели бы отправить админам\n_Пишите текст тут в чате_\n"
-        "🚫 Для отмены используйте /cancel",
+        format_markdown_v2_with_preserved_formatting(
+            "📤 Пришлите *текст*, который хотели бы отправить админам\n_Пишите текст тут в чате_\n"
+            "🚫 Для отмены используйте /cancel"
+        ),
         parse_mode="MarkdownV2",
     )
 
@@ -1020,7 +941,7 @@ def handle_user_to_admin(call):
         and not message.text.startswith("/")
     ),
 )
-@lock_input()
+@simple_lock()
 def handle_user_text(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id, "content")
@@ -1050,7 +971,7 @@ def handle_user_text(message):
         ("confirm_admphoto", "skip_admphoto", "cancel_admphoto")
     ),
 )
-@lock_input()
+@simple_lock()
 def handle_confirmation(call):
     try:
         # Проверка и парсинг данных
@@ -1121,7 +1042,7 @@ def handle_confirmation(call):
     func=lambda message: bot.get_state(message.from_user.id)
     in [UserState.WAITING_ADMIN_CONTENT_PHOTO],
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_adm_photo(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id, "content")
@@ -1175,7 +1096,7 @@ def handle_adm_photo(message):
     func=lambda message: bot.get_state(message.from_user.id)
     in [UserState.WAITING_ADMIN_CONTENT_PHOTO],
 )
-@lock_input()
+@simple_lock()
 def handle_done(message):
     user_id = message.from_user.id
     content_data = user_content_storage.get_data(user_id, "content")
@@ -1192,7 +1113,39 @@ def handle_done(message):
     user_content_storage.clear(user_id)
 
 
-def preview_to_admin_chat(user_id, content_data):
+def create_preview_message(user_id, content_data, target_chat, chat_name):
+    """Создает предварительный просмотр сообщения для отправки"""
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ Отправить", callback_data=f"confirm_send_{user_id}"),
+        types.InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_send_{user_id}"),
+    )
+    
+    if content_data.get("text"):
+        full_text = f"📤 *Новое сообщение для {chat_name}*\n\n{content_data['text']}"
+    else:
+        full_text = f"📤 *Новое сообщение для {chat_name}*"
+    
+    if content_data.get("photos"):
+        if len(content_data["photos"]) == 1:
+            bot.send_photo(
+                target_chat,
+                content_data["photos"][0]["file_id"],
+                caption=full_text,
+                parse_mode="MarkdownV2",
+                reply_markup=markup,
+            )
+        else:
+            media = [types.InputMediaPhoto(photo["file_id"]) for photo in content_data["photos"]]
+            media[0].caption = full_text
+            media[0].parse_mode = "MarkdownV2"
+            bot.send_media_group(target_chat, media)
+            bot.send_message(target_chat, "📤 *Предварительный просмотр*", 
+                           parse_mode="MarkdownV2", reply_markup=markup)
+    else:
+        bot.send_message(target_chat, full_text, parse_mode="MarkdownV2", reply_markup=markup)
+    
+    return markup
     # Сохраняем данные во временное хранилище
     temp_storage[user_id] = content_data
 
@@ -1222,7 +1175,7 @@ def preview_to_admin_chat(user_id, content_data):
 @bot.callback_query_handler(
     func=lambda call: call.data.startswith(("confirm_send", "cancel_send")),
 )
-@lock_input()
+@simple_lock()
 def handle_confirmation(call):
     try:
         action, user_id = call.data.split(":")
@@ -1317,7 +1270,7 @@ def send_to_admin_chat(user_id, content_data):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == ButtonCallback.USER_TO_NEWS)
-@lock_input()
+@simple_lock()
 @private_chat_only(bot)
 def handle_user_to_news(call):
     if is_user_blocked(call):
@@ -1343,7 +1296,7 @@ def handle_user_to_news(call):
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_NEWS_NEWS
 )
-@lock_input()
+@simple_lock()
 def handle_user_news_news(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
@@ -1361,7 +1314,7 @@ def handle_user_news_news(call):
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE_DREAM
 )
-@lock_input()
+@simple_lock()
 def handle_news_code(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
@@ -1369,9 +1322,11 @@ def handle_news_code(call):
     user_content_storage.init_code(user_id)
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
-        text="🔢 Пришлите код\n"
-        "*Формат*: `DA-0000-0000-0000`, _вместо 0 ваши цифры_\n"
-        "🚫 Для отмены используйте /cancel",
+        text=safe_markdown_v2(
+            "🔢 Пришлите код\n"
+            "*Формат*: `DA-0000-0000-0000`, _вместо 0 ваши цифры_\n"
+            "🚫 Для отмены используйте /cancel"
+        ),
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="MarkdownV2",
@@ -1381,7 +1336,7 @@ def handle_news_code(call):
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_NEWS_CODE_DLC
 )
-@lock_input()
+@simple_lock()
 def handle_news_code(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
@@ -1389,9 +1344,11 @@ def handle_news_code(call):
     user_content_storage.init_code(user_id)
     bot.set_state(user_id, UserState.WAITING_CODE_VALUE)
     bot.edit_message_text(
-        text="🔢 Пришлите код\n"
-        "*Формат*: `RA-0000-0000-0000`, _вместо 0 ваши цифры_\n"
-        "🚫 Для отмены используйте /cancel",
+        text=safe_markdown_v2(
+            "🔢 Пришлите код\n"
+            "*Формат*: `RA-0000-0000-0000`, _вместо 0 ваши цифры_\n"
+            "🚫 Для отмены используйте /cancel"
+        ),
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="MarkdownV2",
@@ -1401,7 +1358,7 @@ def handle_news_code(call):
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_NEWS_POCKET,
 )
-@lock_input()
+@simple_lock()
 def handle_news_pocket(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
@@ -1421,7 +1378,7 @@ def handle_news_pocket(call):
 @bot.callback_query_handler(
     func=lambda call: call.data == ButtonCallback.USER_NEWS_DESIGN,
 )
-@lock_input()
+@simple_lock()
 def handle_news_design(call):
     user_id = call.from_user.id
     if user_id in temp_storage:
@@ -1449,7 +1406,7 @@ def parse_speaker_info(text):
     content_types=["photo"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SCREENSHOTS,
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_news_screenshots(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "news")
@@ -1516,7 +1473,7 @@ def request_description(user_id):
     commands=["done"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SCREENSHOTS,
 )
-@lock_input()
+@simple_lock()
 def handle_done_news_photos(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "news")
@@ -1539,7 +1496,7 @@ def handle_done_news_photos(message):
     commands=["skip"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_DESCRIPTION,
 )
-@lock_input()
+@simple_lock()
 def skip_news_description(message):
     user_id = message.from_user.id
     bot.set_state(user_id, UserState.WAITING_NEWS_SPEAKER)
@@ -1552,7 +1509,7 @@ def skip_news_description(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_DESCRIPTION,
 )
-@lock_input()
+@simple_lock()
 def handle_news_description(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "news")
@@ -1567,7 +1524,7 @@ def handle_news_description(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_SPEAKER,
 )
-@lock_input()
+@simple_lock()
 def handle_news_speaker(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "news")
@@ -1583,7 +1540,7 @@ def handle_news_speaker(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_NEWS_ISLAND,
 )
-@lock_input()
+@simple_lock()
 def handle_news_island(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "news")
@@ -1596,7 +1553,7 @@ def handle_news_island(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_VALUE,
 )
-@lock_input()
+@simple_lock()
 def handle_code_value(message):
     user_id = message.from_user.id
     code = message.text.upper()
@@ -1617,7 +1574,7 @@ def handle_code_value(message):
     content_types=["photo"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SCREENSHOTS,
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_code_screenshots(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "code")
@@ -1683,7 +1640,7 @@ def request_speaker(user_id):
     commands=["done"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SCREENSHOTS,
 )
-@lock_input()
+@simple_lock()
 def handle_done_news_photos(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "code")
@@ -1706,7 +1663,7 @@ def handle_done_news_photos(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_SPEAKER,
 )
-@lock_input()
+@simple_lock()
 def handle_code_speaker(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "code")
@@ -1722,7 +1679,7 @@ def handle_code_speaker(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_CODE_ISLAND,
 )
-@lock_input()
+@simple_lock()
 def handle_code_island(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "code")
@@ -1741,7 +1698,7 @@ error_media_groups = {}
     content_types=["photo"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN,
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_pocket_screens(message):
     user_id = message.from_user.id
 
@@ -1773,7 +1730,9 @@ def handle_media_group(message, data, user_id):
         error_media_groups[media_group_id] = True
         bot.send_message(
             user_id,
-            "❌ _Вы уже отправили 1 фото ранее, а сейчас отправляете ещё несколько_\nПришлите второе фото заново",
+            safe_markdown_v2(
+                "❌ _Вы уже отправили 1 фото ранее, а сейчас отправляете ещё несколько_\nПришлите второе фото заново"
+            ),
             parse_mode="MarkdownV2",
         )
         # Устанавливаем таймер для очистки кэша (5 минут)
@@ -1894,7 +1853,7 @@ def finish_pocket_submission(user_id):
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_POCKET_SCREEN
     and m.content_type != "photo",
 )
-@lock_input()
+@simple_lock()
 def handle_invalid_content(message):
     bot.send_message(
         message.chat.id,
@@ -1907,7 +1866,7 @@ def handle_invalid_content(message):
     content_types=["text"],
     func=lambda m: bot.get_state(m.from_user.id) == UserState.WAITING_DESIGN_CODE,
 )
-@lock_input()
+@simple_lock()
 def handle_design_code(message):
     user_id = message.from_user.id
     code = message.text.upper()
@@ -1929,7 +1888,7 @@ def handle_design_code(message):
     func=lambda m: bot.get_state(m.from_user.id)
     == UserState.WAITING_DESIGN_DESIGN_SCREEN,
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_design_screen(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "design")
@@ -1960,7 +1919,7 @@ def handle_design_screen(message):
     func=lambda m: bot.get_state(m.from_user.id)
     == UserState.WAITING_DESIGN_GAME_SCREENS,
 )
-@lock_input(allow_media_groups=True)
+@media_lock
 def handle_game_screens(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "design")
@@ -2019,7 +1978,7 @@ def handle_game_screens(message):
     func=lambda message: bot.get_state(message.from_user.id)
     == UserState.WAITING_DESIGN_GAME_SCREENS,
 )
-@lock_input()
+@simple_lock()
 def handle_done(message):
     user_id = message.from_user.id
     data = user_content_storage.get_data(user_id, "design")
@@ -2041,27 +2000,7 @@ def preview_send_to_news_chat(user_id):
         logger = logging.getLogger(__name__)
 
         # Формируем информацию об отправителе
-        user_info = "\n👤 Отправитель: "
-        if user.username:
-            user_info += f"@{user.username}"
-            name_parts = []
-            if user.first_name:
-                name_parts.append(user.first_name)
-            if user.last_name:
-                name_parts.append(user.last_name)
-            if name_parts:
-                user_info += f" ({' '.join(name_parts)})"
-        else:
-            name_parts = []
-            if user.first_name:
-                name_parts.append(user.first_name)
-            if user.last_name:
-                name_parts.append(user.last_name)
-            user_info += (
-                f"{' '.join(name_parts)} [ID: {user_id}]"
-                if name_parts
-                else f"[ID: {user_id}]"
-            )
+        user_info = create_user_info_text(user_id)
 
         # Формируем медиагруппу
         media = []
@@ -2180,7 +2119,7 @@ def preview_send_to_news_chat(user_id):
 @bot.callback_query_handler(
     func=lambda call: call.data.startswith(("news_confirm_", "news_cancel_")),
 )
-@lock_input()
+@simple_lock()
 def handle_preview_actions_send_to_news_chat(call):
     user_id = call.from_user.id
     action, target_user_id = call.data.split("_")[-2:]

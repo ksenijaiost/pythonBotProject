@@ -1,0 +1,26 @@
+# Токен бота
+BOT_TOKEN=your_bot_token_here
+
+# Режим работы бота (polling для разработки, webhook для продакшена)
+BOT_MODE=polling
+
+# Настройки вебхука (только для BOT_MODE=webhook)
+WEBHOOK_URL=https://yourdomain.com/webhook
+WEBHOOK_HOST=0.0.0.0
+WEBHOOK_PORT=8443
+
+# ID администраторов (через запятую)
+ADMIN_ID_LIST=123456789,987654321
+
+# ID работников газеты (через запятую)
+NEWS_ID_LIST=111222333,444555666
+
+# ID чатов
+CONTEST_CHAT_ID=-1001234567890
+ADMIN_CHAT_ID=-1001234567891
+NEWSPAPER_CHAT_ID=-1001234567892
+CHAT_ID=-1001234567893
+
+# Имена пользователей
+ADMIN_USERNAME=admin_username
+CHAT_USERNAME=chat_username
